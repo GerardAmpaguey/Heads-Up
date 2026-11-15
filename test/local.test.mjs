@@ -114,3 +114,9 @@ test('bing url asks for the place and topics in the right market', () => {
   assert.match(u, /"Baguio" \(typhoon OR/);
   assert.match(u, /setmkt=en-PH/);
 });
+
+test('sports headlines that borrow weather words are dropped', () => {
+  const xml = `<rss><channel>${item('Storm of goals as Baguio FC beat rivals in league opener', 'Sun', 2, 'z')}${item('NBA: Fire up the playoffs in Miami', 'ESPN', 2, 'y')}${item('Fire hits Baguio market', 'Rappler', 2, 'x')}</channel></rss>`;
+  const items = normaliseLocal(xml, { name: 'Baguio' }, NOW);
+  assert.deepEqual(items.map((i) => i.title), ['Fire hits Baguio market']);
+});

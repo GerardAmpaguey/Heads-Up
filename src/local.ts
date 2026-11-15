@@ -8,8 +8,8 @@ export type LocalPlace = { name: string; cc?: string };
 
 const TOPICS = [
   'typhoon', 'tropical storm', 'earthquake', 'flood', 'landslide', 'volcano', 'tsunami', 'wildfire',
-  'state of calamity', 'evacuation', 'power outage', 'class suspension', 'heatwave', 'drought', 'outbreak',
-  'curfew', 'state of emergency', 'airstrike', 'conflict', 'internet outage',
+  'state of calamity', 'evacuation', 'power outage', 'class suspension', 'drought', 'outbreak',
+  'curfew', 'state of emergency', 'airstrike', 'internet outage',
 ];
 
 const NAME_OK = /^[\p{L}\p{N} .'’()-]{2,60}$/u;
@@ -57,8 +57,10 @@ export function realLink(link: string): string {
 export const cacheKey = (place: LocalPlace) => `https://local-news.cache/${place.cc ?? 'xx'}/${encodeURIComponent(place.name.toLowerCase())}`;
 
 const URGENT = /\b(super typhoon|typhoon|signal no\.? ?[345]|tsunami|landfall|evacuat\w*|state of calamity|state of emergency|eruption|erupt\w*|magnitude [6-9](\.\d)?|airstrike|curfew|death toll)\b/i;
-const HEADS_UP = /\b(flood\w*|landslide|earthquake|quake|tropical storm|storm|warning|advisory|power outage|blackout|class(es)? suspen\w*|suspension of classes|volcan\w*|wildfire|fire|outbreak|heat ?wave|drought|outage|conflict)\b/i;
+const HEADS_UP = /\b(flood\w*|landslide|earthquake|quake|tropical storm|storm|warning|advisory|power outage|blackout|class(es)? suspen\w*|suspension of classes|volcan\w*|wildfire|fire|outbreak|drought|outage)\b/i;
 const URGENT_MS = 2 * 86_400_000;
+// Sports pages love words like "storm", "fire" and "flood".
+const SPORTS = /\b(nba|nfl|nhl|mlb|ncaa|playoffs?|championship|quarterback|touchdown|coach|tournament|goal|league|fixture)\b/i;
 
 export function rateLocal(title: string, ageMs: number): Severity {
   if (URGENT.test(title)) return ageMs > URGENT_MS ? 'heads-up' : 'urgent';
@@ -82,7 +84,7 @@ export function normaliseLocal(xmls: string | string[], place: LocalPlace, now =
     const suffix = ` - ${publisher}`;
     const title = (e.title.endsWith(suffix) ? e.title.slice(0, -suffix.length) : e.title).trim();
     const key = norm(title);
-    if (!title || seen.has(key)) continue;
+    if (!title || seen.has(key) || SPORTS.test(title)) continue;
     seen.add(key);
     const age = now.getTime() - Date.parse(e.time);
     if (age > 3 * 86_400_000 || age < -3_600_000) continue;
