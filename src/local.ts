@@ -15,11 +15,12 @@ const TOPICS = [
 
 /** Local newspapers read directly, because search engines often miss them or bury them. A paper's feed is
  *  used for the places it covers, and everything in it counts as being about that area. */
-export type LocalFeed = { publisher: string; url: string; places: string[] };
+export type LocalFeed = { publisher: string; urls: string[]; places: string[] };
 export const LOCAL_FEEDS: LocalFeed[] = [
   {
     publisher: 'Baguio Herald Express',
-    url: 'https://baguioheraldexpressonline.com/feed/',
+    // The main feed holds only the latest ten stories, so the City section and a second page are read too.
+    urls: ['https://baguioheraldexpressonline.com/feed/', 'https://baguioheraldexpressonline.com/feed/?paged=2', 'https://baguioheraldexpressonline.com/category/city/feed/'],
     places: ['baguio', 'benguet', 'la trinidad', 'itogon', 'tuba', 'sablan', 'tublay', 'bauang', 'la union', 'san fernando', 'cordillera'],
   },
 ];
@@ -77,7 +78,7 @@ export function realLink(link: string): string {
 export const cacheKey = (place: LocalPlace) => `https://local-news.cache/${place.cc ?? 'xx'}/${encodeURIComponent(place.name.toLowerCase())}`;
 
 const URGENT = /\b(super typhoon|typhoon|signal no\.? ?[345]|tsunami|landfall|evacuat\w*|state of calamity|state of emergency|eruption|erupt\w*|magnitude [6-9](\.\d)?|airstrike|curfew|death toll)\b/i;
-const HEADS_UP = /\b(flood\w*|landslide|earthquake|quake|tropical storm|storm|warning|advisory|power outage|blackout|class(es)? suspen\w*|suspension of classes|volcan\w*|wildfire|fire|outbreak|drought|outage|groundwater|water (supply|shortage|crisis|interruption)|supply risks?|shortage|heat index|dengue|rabies|road closure|rockslide|sinkhole)\b/i;
+const HEADS_UP = /\b(flood\w*|landslide|earthquake|quake|tropical storm|storm|warning|advisory|power outage|blackout|class(es)? suspen\w*|suspension of classes|volcan\w*|wildfire|fire|outbreak|drought|outage|groundwater|water (supply|shortage|crisis|interruption)|supply risks?|shortage|heat index|dengue|rabies|road closure|rockslide|sinkhole|el ni[ñn]o|la ni[ñn]a|supply measures)\b/i;
 const URGENT_MS = 2 * 86_400_000;
 const HAZARD_MS = 3 * 86_400_000; // older hazard stories are no longer "heads up"
 // Sports pages love words like "storm", "fire" and "flood".
