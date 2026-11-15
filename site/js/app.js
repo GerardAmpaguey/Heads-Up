@@ -79,7 +79,7 @@ async function loadLive() {
     const now = Date.now();
     const live = data.items.map((a) => ({
       id: a.id, category: 'hazard', severity: a.severity, title: a.title, summary: a.summary,
-      action: a.action, source: a.source, url: a.url, tags: a.tags || [],
+      action: a.action, source: a.source, url: a.url, tags: a.tags || [], image: a.image, imageCredit: a.imageCredit,
       ago: Math.max(0, Math.round((now - Date.parse(a.time)) / 60000)),
       km: a.distanceKm == null ? null : Math.round(a.distanceKm),
       demo: false,

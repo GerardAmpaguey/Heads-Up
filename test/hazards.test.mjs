@@ -278,3 +278,10 @@ test('a storage failure becomes a clean 503', async () => {
   const res = await worker.fetch(new Request('https://x.test/api/alerts'), env, ctx());
   assert.equal(res.status, 503);
 });
+
+test('gdacs cyclones carry the overview map of their newest episode, other hazards do not', () => {
+  const [tc, fl] = [normaliseGdacs(gdacsFeed).find((a) => a.id === 'gdacs:TC:1001'), normaliseGdacs(gdacsFeed).find((a) => a.kind === 'flood')];
+  assert.equal(tc.image, 'https://www.gdacs.org/contentdata/resources/imgtemp/gdacs/tc/1001/1001_5_tn.png');
+  assert.equal(tc.imageCredit, 'GDACS / EC-JRC');
+  assert.equal(fl.image, undefined);
+});

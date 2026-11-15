@@ -87,6 +87,11 @@ export function normaliseGdacs(json: unknown): Alert[] {
       lon,
       tags: [],
     };
+    // GDACS publishes an overview map for each cyclone episode. Hotlinked, never copied; the page hides it if it 404s.
+    if (p.eventtype === 'TC' && p.episodeid != null) {
+      alert.image = `https://www.gdacs.org/contentdata/resources/imgtemp/gdacs/tc/${p.eventid}/${p.eventid}_${p.episodeid}_tn.png`;
+      alert.imageCredit = 'GDACS / EC-JRC';
+    }
     const seen = byEvent.get(alert.id);
     if (!seen || Date.parse(alert.time) > Date.parse(seen.time)) byEvent.set(alert.id, alert);
   }
