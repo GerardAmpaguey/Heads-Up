@@ -248,6 +248,48 @@ function showStatus(data) {
   node.textContent = `Updated ${ago(mins)}. ${down === 0 ? `All ${sources.length} sources reachable.` : `${down} of ${sources.length} sources are unavailable right now.`}`;
 }
 
+
+/* ---------- status line under the masthead ---------- */
+
+function renderPulse() {
+  const node = document.getElementById('pulse');
+  if (!node) return;
+  if (feed.status !== 'ready' || !feed.data || feed.data.warming) { node.hidden = true; return; }
+  const count = (sev) => ITEMS.filter((i) => i.severity === sev).length;
+  const urgent = count('urgent');
+  const heads = count('heads-up');
+  const mins = Math.max(0, Math.round((Date.now() - Date.parse(feed.data.updatedAt)) / 60000));
+  const item = (sev, n, label, href) => el('a', { class: 'pulse__item', href },
+    el('span', { class: `dot${sev === 'urgent' && n ? ' dot--live' : ''}`, 'data-sev': n ? sev : 'fyi', 'aria-hidden': 'true' }),
+    `${n} ${label}`);
+  node.replaceChildren(el('div', { class: 'wrap pulse__inner' },
+    item('urgent', urgent, 'urgent', '#/latest?s=urgent'),
+    item('heads-up', heads, heads === 1 ? 'heads up' : 'heads ups', '#/latest?s=heads-up'),
+    el('span', { class: 'pulse__when' }, `Updated ${ago(mins)}`),
+  ));
+  node.hidden = false;
+}
+
+/* ---------- theme ---------- */
+
+const THEME_KEY = 'headsup.theme';
+function currentTheme() {
+  try { const t = localStorage.getItem(THEME_KEY); if (t === 'dark' || t === 'light') return t; } catch {}
+  return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  document.querySelector('meta[name="color-scheme"]')?.setAttribute('content', t);
+  const btn = document.getElementById('theme');
+  if (btn) { btn.setAttribute('aria-pressed', t === 'dark' ? 'true' : 'false'); btn.setAttribute('aria-label', t === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'); }
+}
+document.getElementById('theme').addEventListener('click', () => {
+  const next = currentTheme() === 'dark' ? 'light' : 'dark';
+  try { localStorage.setItem(THEME_KEY, next); } catch {}
+  applyTheme(next);
+});
+applyTheme(currentTheme());
+
 /* ---------- pieces ---------- */
 
 function sevPill(item) {
@@ -311,16 +353,30 @@ function withPhoto(container, item, { eager = false, credit = true } = {}) {
   return container;
 }
 
-/* Large lead story at the top of the front page. */
+/* Lead story: headline and dek on one side, picture (or category art) on the other. */
 function lead(item) {
-  return withPhoto(el('button', { class: 'lead', type: 'button', 'data-cat': item.category, onclick: () => openSheet(item) },
-    art(item, 'lead__art'),
+  const media = withPhoto(el('span', { class: 'lead__media', 'data-cat': item.category }, art(item, 'lead__art')), item, { eager: true });
+  return el('button', { class: 'lead', type: 'button', onclick: () => openSheet(item) },
+    media,
     el('span', { class: 'lead__text' },
       el('span', { class: 'lead__kicker' }, sevPill(item), el('span', {}, `${CATEGORIES[item.category].label} · ${ago(item.ago)}`)),
       el('span', { class: 'lead__title' }, item.title),
       el('span', { class: 'lead__summary' }, item.summary),
+      el('span', { class: 'lead__meta' }, metaLine(item)),
     ),
-  ), item, { eager: true });
+  );
+}
+
+/* One row of the ranked "Top alerts" list. */
+function rankRow(item, n) {
+  return el('button', { class: 'rank__item', type: 'button', onclick: () => openSheet(item) },
+    el('span', { class: 'rank__n', 'aria-hidden': 'true' }, String(n)),
+    el('span', { class: 'rank__body' },
+      el('span', { class: 'rank__label' }, sevPill(item), el('span', {}, CATEGORIES[item.category].label)),
+      el('span', { class: 'rank__title' }, item.title),
+      el('span', { class: 'rank__meta' }, metaLine(item)),
+    ),
+  );
 }
 
 /* Row with a small thumbnail, used in the side list and the Latest list. */
@@ -348,7 +404,7 @@ function tile(item) {
   );
 }
 
-function sectionHead(title, href, linkText = 'View more +') {
+function sectionHead(title, href, linkText = 'See all') {
   return el('header', { class: 'sec-head' },
     el('h2', { class: 'sec-title' }, title),
     href && el('a', { class: 'sec-more', href }, linkText),
@@ -475,7 +531,7 @@ let latestFilter = 'all';
 /* Latest on the front page: five items, with a severity tab to narrow them. */
 function latestBlock() {
   const list = el('ul', { class: 'list' });
-  const more = el('a', { class: 'sec-more', href: '#/latest' }, 'View more +');
+  const more = el('a', { class: 'sec-more', href: '#/latest' }, 'See all');
   const tabs = el('div', { class: 'chips chips--tabs', role: 'group', 'aria-label': 'Show latest by severity' });
   const options = [['all', 'All'], ...Object.entries(SEVERITY).map(([k, v]) => [k, v.label])];
   const fill = () => {
@@ -508,13 +564,16 @@ function homeView() {
   const ranked = sorted(ITEMS);
   const top = ranked[0];
   if (!top) return [el('p', { class: 'empty empty--state' }, 'No alerts right now. We check again every 30 minutes.')];
-  const side = ranked.slice(1, 5);
+  const side = ranked.slice(1, 6);
   const urgent = ranked.filter((i) => i.severity === 'urgent');
 
   const out = [
-    el('section', { class: 'front', 'aria-label': 'Top alerts' },
+    el('section', { class: 'front', 'aria-label': 'Top story and ranked alerts' },
       lead(top),
-      el('ul', { class: 'front__side' }, side.map((i) => el('li', {}, story(i)))),
+      el('section', { class: 'rail', 'aria-labelledby': 'rail-title' },
+        el('h2', { class: 'rail__title', id: 'rail-title' }, 'Top alerts'),
+        el('ol', { class: 'rank' }, side.map((i, n) => el('li', {}, rankRow(i, n + 2)))),
+      ),
     ),
 
     el('div', { class: 'cols' },
@@ -536,7 +595,7 @@ function homeView() {
 
   for (const [id, meta] of Object.entries(CATEGORIES)) {
     out.push(el('section', { class: 'block', 'aria-label': meta.label },
-      sectionHead(meta.label, catRoute(id)),
+      sectionHead(meta.label, catRoute(id), 'See all'),
       tileGrid(sorted(ITEMS.filter((i) => i.category === id)).slice(0, 4), EMPTY[id]),
     ));
   }
@@ -626,6 +685,7 @@ function route() {
 
   if (path !== 'search') document.getElementById('q').value = '';
   renderNav(active);
+  renderPulse();
   main.replaceChildren(...view.filter(Boolean));
   document.title = active && active !== 'home' ? `${TABS.find((t) => t.id === active).label} · Heads Up` : 'Heads Up';
 }
