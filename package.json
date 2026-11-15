@@ -1,0 +1,17 @@
+{
+  "name": "heads-up",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Heads Up: the important stuff to prepare for, in one place. Hazards near you, web dev and AI.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

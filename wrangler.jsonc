@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "heads-up",
+  "compatibility_date": "2026-11-01",
+
+  // For now the site is plain static files. A Worker for the live feeds comes later.
+  "assets": {
+    "directory": "./site"
+  }
+}

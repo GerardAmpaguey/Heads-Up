@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Heads Up</title>
+    <meta name="description" content="The important things to prepare for, in one place: hazards near you, web dev changes and AI." />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0d1022" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Figtree:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to the alerts</a>
+
+    <header class="topbar">
+      <a class="brand" href="#/" aria-label="Heads Up home">
+        <svg viewBox="0 0 64 64" width="26" height="26" aria-hidden="true"><path d="M32 8 58 52H6z" fill="currentColor"/><rect x="29.5" y="24" width="5" height="15" rx="2.5" fill="#0d1022"/><circle cx="32" cy="45" r="3.2" fill="#0d1022"/></svg>
+        <span>Heads Up</span>
+      </a>
+
+      <nav class="tabs" id="tabs" aria-label="Sections"></nav>
+
+      <div class="topbar__tools">
+        <p class="where" id="where" title="Detected from your connection (demo)">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+          <span id="where-label">Philippines</span>
+        </p>
+        <form class="search" id="search" role="search">
+          <label class="sr" for="q">Search alerts</label>
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+          <input id="q" name="q" type="search" placeholder="Search alerts" autocomplete="off" />
+        </form>
+      </div>
+    </header>
+
+    <p class="demo-bar" role="note"><strong>Demo data.</strong> These alerts are made up to show the layout. Live feeds come next.</p>
+
+    <main id="main" tabindex="-1"></main>
+
+    <nav class="dock" id="dock" aria-label="Sections"></nav>
+
+    <dialog class="sheet" id="sheet" aria-labelledby="sheet-title"></dialog>
+
+    <script type="module" src="/js/app.js"></script>
+  </body>
+</html>
