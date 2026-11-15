@@ -58,6 +58,7 @@ function ago(minutes) {
 const ICONS = {
   hazard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.2 21.6 20H2.4z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.2" r=".6" fill="currentColor"/></svg>',
   webdev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M13.6 4.5l-3.2 15"/></svg>',
+  planet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19c0-8 5-13 14-14 0 9-5 14-13 14"/><path d="M5 19c3-5 6-8 10-10"/></svg>',
   ai: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 3.5 13 9l5.5 2-5.5 2-2 5.5L9 13 3.5 11 9 9z"/><path d="M19 3v4M17 5h4M18.5 16v3.5M16.8 17.8h3.4"/></svg>',
 };
 
@@ -422,7 +423,8 @@ const TABS = [
   { id: 'home', label: 'Home', href: '#/' },
   { id: 'hazard', label: 'Around you', href: '#/around' },
   { id: 'webdev', label: 'Web dev', href: '#/webdev' },
-  { id: 'ai', label: 'AI', href: '#/ai' },
+  { id: 'ai', label: 'AI & tech', href: '#/ai' },
+  { id: 'planet', label: 'Planet', href: '#/planet' },
   { id: 'latest', label: 'Latest', href: '#/latest' },
   { id: 'watchlist', label: 'Watchlist', href: '#/watchlist' },
 ];
@@ -465,9 +467,9 @@ function stateBlock() {
 }
 
 const LATEST_COUNT = 5;
-// Small quakes and similar FYI hazards would crowd out everything else in a newest-first list.
+// Small quakes and similar FYI hazards (but not local news) would crowd out everything else in a newest-first list.
 // They stay on the Around you page.
-const forLatest = () => ITEMS.filter((i) => !(i.category === 'hazard' && i.severity === 'fyi'));
+const forLatest = () => ITEMS.filter((i) => !(i.category === 'hazard' && i.severity === 'fyi' && !i.local));
 let latestFilter = 'all';
 
 /* Latest on the front page: five items, with a severity tab to narrow them. */
@@ -498,7 +500,8 @@ function latestBlock() {
 const EMPTY = {
   hazard: 'No active hazards near you right now. We check every 30 minutes.',
   webdev: 'No web dev news in the last month.',
-  ai: 'No AI news in the last month.',
+  ai: 'No AI or tech news in the last month.',
+  planet: 'No environment or health news in the last month.',
 };
 
 function homeView() {
@@ -614,6 +617,7 @@ function route() {
   if (path === 'around') { active = 'hazard'; view = categoryView('hazard', params.get('s') || 'all'); }
   else if (path === 'webdev') { active = 'webdev'; view = categoryView('webdev', params.get('s') || 'all'); }
   else if (path === 'ai') { active = 'ai'; view = categoryView('ai', params.get('s') || 'all'); }
+  else if (path === 'planet') { active = 'planet'; view = categoryView('planet', params.get('s') || 'all'); }
   else if (path === 'latest') { active = 'latest'; view = latestView(params.get('s') || 'all'); }
   else if (path === 'watchlist') { active = 'watchlist'; view = watchlistView(); }
   else if (path === 'search') { active = ''; view = searchView(params.get('q') || ''); }

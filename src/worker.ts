@@ -80,7 +80,7 @@ async function localNews(request: Request, ctx: Ctx): Promise<{ place: string | 
         if (!res.ok) throw new Error(`news answered ${res.status}`);
         return res.text();
       };
-      const results = await Promise.allSettled([ask(searchUrl(place)), ask(bingUrl(place))]);
+      const results = await Promise.allSettled([ask(searchUrl(place)), ask(bingUrl(place)), ask(searchUrl(place, 'general')), ask(bingUrl(place, 'general'))]);
       const xmls = results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map((r) => r.value);
       if (xmls.length === 0) throw new Error(results.map((r) => (r as PromiseRejectedResult).reason?.message ?? 'failed').join('; '));
       const items = normaliseLocal(xmls, place);

@@ -38,14 +38,16 @@ test('ratings: storms and evacuations urgent, floods and outages heads-up, other
   assert.equal(rateLocal('Flower festival returns', 3_600_000), 'fyi');
 });
 
-test('normaliseLocal strips the publisher suffix and keeps only recent, hazard-related, non-duplicate stories', () => {
+test('normaliseLocal strips the publisher suffix and keeps recent, non-duplicate stories about the place, rating hazards higher', () => {
   const items = normaliseLocal(rss, { name: 'Baguio', cc: 'PH' }, NOW);
   assert.deepEqual(items.map((i) => i.title), [
     'Typhoon Kiko to make landfall in northern Luzon',
     'Classes suspended in Baguio due to heavy rains',
+    'Baguio Flower Festival returns',
   ]);
-  // the typhoon story does not name Baguio, so it counts one step lower; the flower festival is not about a hazard
-  assert.deepEqual(items.map((i) => i.severity), ['heads-up', 'heads-up']);
+  // the typhoon story does not name Baguio, so it counts one step lower. Ordinary news that names the city is kept as FYI.
+  assert.deepEqual(items.map((i) => i.severity), ['heads-up', 'heads-up', 'fyi']);
+  assert.equal(items[2].action, 'Local news for your area. No action needed.');
   assert.equal(items[0].source, 'Philippine Daily Inquirer');
   assert.equal(items[0].category, 'hazard');
   assert.equal(items[0].kind, 'news');
@@ -85,7 +87,7 @@ test('the API returns local news for the picked place, and survives the news sou
     assert.ok(body.local.items.length >= 1);
     globalThis.fetch = async () => new Response('down', { status: 503 });
     const down = await (await worker.fetch(withCf('https://x.test/api/alerts?lat=16.4&lon=120.6&city=Baguio&cc=PH', {}), e, ctx())).json();
-    assert.deepEqual(down.local, { place: 'Baguio', ok: false, items: [], error: 'news answered 503; news answered 503' });
+    assert.deepEqual(down.local, { place: 'Baguio', ok: false, items: [], error: Array(4).fill('news answered 503').join('; ') });
     const none = await (await worker.fetch(new Request('https://x.test/api/alerts'), e, ctx())).json();
     assert.deepEqual(none.local, { place: null, ok: true, items: [] });
   } finally { globalThis.fetch = real; }
@@ -129,4 +131,13 @@ test('pickNews keeps each quiet source\'s latest items even when busy feeds fill
   assert.equal(out.length, 10);
   assert.equal(out.filter((n) => n.source === 'Quiet').length, 3);
   assert.ok(out.every((n, i, a) => i === 0 || Date.parse(a[i - 1].time) >= Date.parse(n.time)));
+});
+
+test('general mode asks for any news about the place; showbiz and unrelated stories are dropped', () => {
+  assert.doesNotMatch(decodeURIComponent(searchUrl({ name: 'Baguio', cc: 'PH' }, 'general')), /typhoon/);
+  assert.match(decodeURIComponent(searchUrl({ name: 'Baguio', cc: 'PH' }, 'general')), /"Baguio" when:7d/);
+  assert.doesNotMatch(decodeURIComponent(bingUrl({ name: 'Baguio', cc: 'PH' }, 'general')), /typhoon/);
+  const xml = `<rss><channel>${item('City council approves Baguio water rehabilitation plan', 'Sun', 20, 'p')}${item('Actress spotted in Baguio for movie shoot', 'Push', 20, 'q')}${item('Mindoro unveils lake makeover', 'ABS', 20, 'r')}</channel></rss>`;
+  const items = normaliseLocal(xml, { name: 'Baguio' }, NOW);
+  assert.deepEqual(items.map((i) => [i.title, i.severity]), [['City council approves Baguio water rehabilitation plan', 'fyi']]);
 });

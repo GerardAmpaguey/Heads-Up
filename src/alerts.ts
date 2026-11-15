@@ -42,7 +42,7 @@ export type LocalItem = {
 /** A web dev or AI news item. Same fields as a hazard alert where they overlap, but no location. */
 export type NewsItem = {
   id: string;
-  category: 'webdev' | 'ai';
+  category: 'webdev' | 'ai' | 'planet';
   severity: Severity;
   title: string;
   summary: string;

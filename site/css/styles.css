@@ -108,6 +108,7 @@ main:focus, main:focus-visible { outline: none; }
 
 [data-cat='hazard'] { --art: linear-gradient(150deg, #ff6b81 0%, #b3294f 55%, #4d1650 100%); }
 [data-cat='webdev'] { --art: linear-gradient(150deg, #4cc9f0 0%, #3a58d6 55%, #1c1f69 100%); }
+[data-cat='planet'] { --art: linear-gradient(150deg, #7be0a8 0%, #1f9d6b 55%, #0c4a3a 100%); }
 [data-cat='ai'] { --art: linear-gradient(150deg, #c39bff 0%, #6a3fd0 55%, #2a1763 100%); }
 .lead__art svg, .story__thumb svg, .tile__art svg, .sheet__art svg { width: 100%; height: 100%; display: block; }
 

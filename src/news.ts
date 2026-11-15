@@ -9,7 +9,7 @@ export type FeedDef = {
   id: string;
   name: string; // shown as the source
   url: string;
-  category: 'webdev' | 'ai';
+  category: 'webdev' | 'ai' | 'planet';
   kind: 'release' | 'security' | 'news';
   tags: string[]; // watchlist tags this feed always carries
   label?: string; // GitHub releases: product name used to build the headline
@@ -47,6 +47,14 @@ export const FEEDS: FeedDef[] = [
   { id: 'verge-ai', name: 'The Verge', url: 'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml', category: 'ai', kind: 'news', tags: [] },
   { id: 'techcrunch-ai', name: 'TechCrunch', url: 'https://techcrunch.com/category/artificial-intelligence/feed/', category: 'ai', kind: 'news', tags: [] },
   { id: 'mittr', name: 'MIT Technology Review', url: 'https://www.technologyreview.com/topic/artificial-intelligence/feed', category: 'ai', kind: 'news', tags: [] },
+  { id: 'ars', name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index', category: 'ai', kind: 'news', tags: [] },
+  { id: 'hn', name: 'Hacker News', url: 'https://hnrss.org/frontpage?points=300', category: 'ai', kind: 'news', tags: [] },
+  { id: 'bleeping', name: 'BleepingComputer', url: 'https://www.bleepingcomputer.com/feed/', category: 'ai', kind: 'news', tags: [] },
+  { id: 'carbonbrief', name: 'Carbon Brief', url: 'https://www.carbonbrief.org/feed/', category: 'planet', kind: 'news', tags: [] },
+  { id: 'mongabay', name: 'Mongabay', url: 'https://news.mongabay.com/feed/', category: 'planet', kind: 'news', tags: [] },
+  { id: 'who', name: 'WHO outbreak news', url: 'https://www.who.int/feeds/entity/csr/don/en/rss.xml', category: 'planet', kind: 'news', tags: [] },
+  { id: 'unclimate', name: 'UN News', url: 'https://news.un.org/feed/subscribe/en/news/topic/climate-change/feed/rss.xml', category: 'planet', kind: 'news', tags: [] },
+  { id: 'nasa-eo', name: 'NASA Earth Observatory', url: 'https://earthobservatory.nasa.gov/feeds/image-of-the-day.rss', category: 'planet', kind: 'news', tags: [] },
   { id: 'willison', name: 'Simon Willison', url: 'https://simonwillison.net/atom/everything/', category: 'ai', kind: 'news', tags: [] },
 ];
 
@@ -156,6 +164,7 @@ export function parseFeed(xml: string, { images = true }: { images?: boolean } =
 const CRITICAL = /\b(zero[- ]?day|0[- ]?day|actively exploited|being (actively )?(exploited|attacked)|under (active )?attack|critical (vulnerabilit\w*|flaw|security|severity)|remote code execution|supply[- ]chain (attack|compromise)|mass(ive)? (compromise|exploitation)|emergency (patch|update|release|fix))\b/i;
 const SECURITY = /\b(security (release|update|fix|patch|advisory|issue)|vulnerab\w*|cve-\d{4}-\d+|exploit\w*|malware|backdoor|compromised|breach|xss|sql injection|privilege escalation|hacked)\b/i;
 const CHANGE = /\b(breaking change|deprecat\w*|end[- ]of[- ]life|sunset\w*|retir(e|es|ed|ing|ement)|discontinu\w*|shut(ting)? down)\b/i;
+const PLANET_ALERT = /\b(outbreak|epidemic|pandemic|emergency|heat ?wave|wildfires?|drought|famine|record[- ](high|low|breaking|temperatures?)|extinction|ceasefire|shortage|recall|contamination|toxic|cholera|dengue|measles|bird flu|mpox)\b/i;
 const MAJOR = /(?<![\d.])\d+\.0(\.0)?(?![\d.])/;
 
 export function rate(def: Pick<FeedDef, 'category' | 'kind'>, title: string, text: string): { severity: Severity; action: string } {
@@ -169,12 +178,15 @@ export function rate(def: Pick<FeedDef, 'category' | 'kind'>, title: string, tex
     if (critical && (def.kind === 'security' || security)) severity = 'urgent';
     else if (security || change) severity = 'heads-up';
     else if (def.kind === 'release' && MAJOR.test(title)) severity = 'heads-up';
+  } else if (def.category === 'planet') {
+    if (PLANET_ALERT.test(all)) severity = 'heads-up';
   } else if (security || change) {
     severity = 'heads-up';
   }
 
   let action: string;
   if (severity === 'urgent') action = 'If you run the affected software, update it now, then check your sites for signs of a break-in. Back up first.';
+  else if (def.category === 'planet') action = severity === 'heads-up' ? 'Worth knowing about. Check what it means for your area with your local health, weather or environment agency.' : 'Worth a skim. No action needed.';
   else if (security) action = 'Check whether you run the affected software and update it soon. Back up before you do.';
   else if (change) action = 'Check whether this affects your projects and plan the change before it is forced on you.';
   else if (def.category === 'ai') action = 'Worth a skim. No action needed unless you use this tool.';

@@ -149,3 +149,15 @@ test('urgent news cools to heads-up after four days', () => {
   assert.doesNotMatch(a.action, /update it now/i);
   assert.equal(normaliseFeed(def('wordfence'), rss, NOW)[0].severity, 'urgent');
 });
+
+test('planet news: outbreaks and emergencies are heads-up, everything else is a skim', () => {
+  const who = def('who');
+  assert.equal(who.category, 'planet');
+  assert.equal(rate(who, 'Cholera outbreak declared in two provinces', '').severity, 'heads-up');
+  assert.match(rate(who, 'Cholera outbreak declared in two provinces', '').action, /local health/);
+  assert.equal(rate(def('carbonbrief'), 'Analysis: how coal use changed in 2026', 'A review.').severity, 'fyi');
+  assert.equal(rate(def('mongabay'), 'Vulnerability of mangroves to storms', '').severity, 'fyi', 'planet news is not rated like software security');
+  const [it] = normaliseFeed(def('nasa-eo'), `<rss><channel><item><title>Smoke over the Pacific</title><link>https://earthobservatory.nasa.gov/images/1</link><pubDate>${new Date(NOW.getTime() - 3_600_000).toUTCString()}</pubDate><description>A view.</description><enclosure url="https://assets.science.nasa.gov/x.jpg" type="image/jpeg" length="1"/></item></channel></rss>`, NOW);
+  assert.equal(it.image, 'https://assets.science.nasa.gov/x.jpg');
+  assert.equal(it.imageCredit, 'NASA Earth Observatory');
+});

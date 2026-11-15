@@ -3,7 +3,8 @@
 export const CATEGORIES = {
   hazard: { label: 'Around you', blurb: 'Weather, quakes, outages and other things that could affect you.' },
   webdev: { label: 'Web dev', blurb: 'Releases, security fixes and changes for the tools you build with.' },
-  ai: { label: 'AI', blurb: 'New tools, models and reports worth knowing about.' },
+  ai: { label: 'AI & tech', blurb: 'AI models and tools, security news and the tech stories worth knowing about.' },
+  planet: { label: 'Planet', blurb: 'Environment, climate, health outbreaks and how to stay safe.' },
 };
 
 export const SEVERITY = {
