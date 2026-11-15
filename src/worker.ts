@@ -51,7 +51,7 @@ export function localPlaceFrom(request: Request): LocalPlace | null {
 type EdgeCache = { match(req: Request): Promise<Response | undefined>; put(req: Request, res: Response): Promise<void> };
 
 /** Local news, cached for 30 minutes per place so visitors never wait on, or hammer, the news source. */
-async function localNews(request: Request, ctx: Ctx): Promise<{ place: string | null; ok: boolean; items: LocalItem[] }> {
+async function localNews(request: Request, ctx: Ctx): Promise<{ place: string | null; ok: boolean; items: LocalItem[]; error?: string }> {
   const place = localPlaceFrom(request);
   if (!place) return { place: null, ok: true, items: [] };
   const cache = (globalThis as unknown as { caches?: { default?: EdgeCache } }).caches?.default;
@@ -66,8 +66,8 @@ async function localNews(request: Request, ctx: Ctx): Promise<{ place: string | 
       if (cache) ctx.waitUntil(cache.put(key, hit.clone()).catch(() => undefined));
     }
     return { place: place.name, ok: true, items: (await hit.json()) as LocalItem[] };
-  } catch {
-    return { place: place.name, ok: false, items: [] };
+  } catch (err) {
+    return { place: place.name, ok: false, items: [], error: String(err instanceof Error ? err.message : err).slice(0, 120) };
   }
 }
 

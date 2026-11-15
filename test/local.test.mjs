@@ -85,7 +85,7 @@ test('the API returns local news for the picked place, and survives the news sou
     assert.ok(body.local.items.length >= 1);
     globalThis.fetch = async () => new Response('down', { status: 503 });
     const down = await (await worker.fetch(withCf('https://x.test/api/alerts?lat=16.4&lon=120.6&city=Baguio&cc=PH', {}), e, ctx())).json();
-    assert.deepEqual(down.local, { place: 'Baguio', ok: false, items: [] });
+    assert.deepEqual(down.local, { place: 'Baguio', ok: false, items: [], error: 'news answered 503' });
     const none = await (await worker.fetch(new Request('https://x.test/api/alerts'), e, ctx())).json();
     assert.deepEqual(none.local, { place: null, ok: true, items: [] });
   } finally { globalThis.fetch = real; }
