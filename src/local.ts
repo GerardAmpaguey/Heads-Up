@@ -86,11 +86,16 @@ export function normaliseLocal(xmls: string | string[], place: LocalPlace, now =
     seen.add(key);
     const age = now.getTime() - Date.parse(e.time);
     if (age > 3 * 86_400_000 || age < -3_600_000) continue;
+    // Search results are loose, so keep only stories about hazards or disruption. A story that does not
+    // mention the place itself may be about somewhere nearby, so it counts one step lower.
+    let severity = rateLocal(title, age);
+    if (!`${title} ${e.text}`.toLowerCase().includes(place.name.toLowerCase())) severity = severity === 'urgent' ? 'heads-up' : 'fyi';
+    if (severity === 'fyi') continue;
     items.push({
       id: `local:${realLink(e.link)}`,
       category: 'hazard',
       kind: 'news',
-      severity: rateLocal(title, age),
+      severity,
       title,
       summary: snippet(e.text, title) ?? `News report from ${publisher} about ${place.name}. This is not an official alert, so open the story for details.`,
       action: 'Treat this as news coverage, not an official warning. Check your local government and weather or disaster agency for instructions.',

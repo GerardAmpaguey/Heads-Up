@@ -38,14 +38,14 @@ test('ratings: storms and evacuations urgent, floods and outages heads-up, other
   assert.equal(rateLocal('Flower festival returns', 3_600_000), 'fyi');
 });
 
-test('normaliseLocal strips the publisher suffix, drops duplicates and anything older than three days', () => {
+test('normaliseLocal strips the publisher suffix and keeps only recent, hazard-related, non-duplicate stories', () => {
   const items = normaliseLocal(rss, { name: 'Baguio', cc: 'PH' }, NOW);
   assert.deepEqual(items.map((i) => i.title), [
     'Typhoon Kiko to make landfall in northern Luzon',
     'Classes suspended in Baguio due to heavy rains',
-    'Baguio Flower Festival returns',
   ]);
-  assert.deepEqual(items.map((i) => i.severity), ['urgent', 'heads-up', 'fyi']);
+  // the typhoon story does not name Baguio, so it counts one step lower; the flower festival is not about a hazard
+  assert.deepEqual(items.map((i) => i.severity), ['heads-up', 'heads-up']);
   assert.equal(items[0].source, 'Philippine Daily Inquirer');
   assert.equal(items[0].category, 'hazard');
   assert.equal(items[0].kind, 'news');
