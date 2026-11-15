@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { FEEDS, decode, normaliseEol, normaliseFeed, parseFeed, rate, tagsFor } from '../src/news.ts';
 
+const NOW = new Date('2026-11-15T12:00:00Z');
 const def = (id) => FEEDS.find((f) => f.id === id);
 
 const rss = `<?xml version="1.0" encoding="UTF-8"?>
@@ -76,7 +77,7 @@ test('parseFeed is safe on junk', () => {
 });
 
 test('github release feeds: filter by package, drop betas, build a readable headline, never use avatars', () => {
-  const items = normaliseFeed(def('astro'), atom);
+  const items = normaliseFeed(def('astro'), atom, NOW);
   assert.equal(items.length, 2);
   assert.equal(items[0].title, 'Astro 6.2.0 released');
   assert.equal(items[0].image, undefined);
@@ -98,7 +99,7 @@ test('rating: exploited critical flaws are urgent, security fixes are heads-up, 
 });
 
 test('rss security feed end to end', () => {
-  const [a, b] = normaliseFeed(def('wordfence'), rss);
+  const [a, b] = normaliseFeed(def('wordfence'), rss, NOW);
   assert.equal(a.severity, 'urgent');
   assert.equal(a.category, 'webdev');
   assert.equal(a.source, 'Wordfence');
@@ -137,4 +138,12 @@ test('end of life: only versions ending within 120 days (or just ended) are show
 test('every feed id is unique and every url is https', () => {
   assert.equal(new Set(FEEDS.map((f) => f.id)).size, FEEDS.length);
   assert.ok(FEEDS.every((f) => f.url.startsWith('https://')));
+});
+
+test('urgent news cools to heads-up after four days', () => {
+  const later = new Date('2026-11-20T12:00:00Z'); // the exploited-flaw post is 6 days old
+  const [a] = normaliseFeed(def('wordfence'), rss, later);
+  assert.equal(a.severity, 'heads-up');
+  assert.doesNotMatch(a.action, /update it now/i);
+  assert.equal(normaliseFeed(def('wordfence'), rss, NOW)[0].severity, 'urgent');
 });

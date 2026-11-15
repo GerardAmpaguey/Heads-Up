@@ -323,6 +323,9 @@ function stateBlock() {
 }
 
 const LATEST_COUNT = 5;
+// Small quakes and similar FYI hazards would crowd out everything else in a newest-first list.
+// They stay on the Around you page.
+const forLatest = () => ITEMS.filter((i) => !(i.category === 'hazard' && i.severity === 'fyi'));
 let latestFilter = 'all';
 
 /* Latest on the front page: five items, with a severity tab to narrow them. */
@@ -332,13 +335,14 @@ function latestBlock() {
   const tabs = el('div', { class: 'chips chips--tabs', role: 'group', 'aria-label': 'Show latest by severity' });
   const options = [['all', 'All'], ...Object.entries(SEVERITY).map(([k, v]) => [k, v.label])];
   const fill = () => {
-    const rows = ITEMS.filter((i) => latestFilter === 'all' || i.severity === latestFilter).sort(byNew).slice(0, LATEST_COUNT);
+    const rows = forLatest().filter((i) => latestFilter === 'all' || i.severity === latestFilter).sort(byNew).slice(0, LATEST_COUNT);
     list.replaceChildren(...(rows.length ? rows.map((i) => el('li', {}, story(i, true))) : [el('li', { class: 'empty' }, 'Nothing in this group right now.')]));
     more.setAttribute('href', latestFilter === 'all' ? '#/latest' : `#/latest?s=${latestFilter}`);
     for (const b of tabs.children) b.setAttribute('aria-pressed', b.dataset.k === latestFilter ? 'true' : 'false');
   };
   for (const [k, label] of options) {
-    const n = k === 'all' ? ITEMS.length : ITEMS.filter((i) => i.severity === k).length;
+    const pool = forLatest();
+    const n = k === 'all' ? pool.length : pool.filter((i) => i.severity === k).length;
     tabs.append(el('button', { class: 'chip chip--tab', type: 'button', 'data-k': k, onclick: () => { latestFilter = k; fill(); } }, `${label} `, el('span', { class: 'chip__n' }, String(n))));
   }
   fill();
@@ -415,7 +419,7 @@ function categoryView(id, filter) {
 }
 
 function latestView(filter) {
-  const all = [...ITEMS].sort(byNew);
+  const all = forLatest().sort(byNew);
   const shown = (filter === 'all' ? all : all.filter((i) => i.severity === filter)).slice(0, 60);
   const chips = [['all', 'All', all.length], ...Object.entries(SEVERITY).map(([k, v]) => [k, v.label, all.filter((i) => i.severity === k).length])];
   return [

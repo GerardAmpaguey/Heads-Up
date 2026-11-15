@@ -193,14 +193,19 @@ function headline(def: FeedDef, title: string): string {
 }
 
 const PER_FEED = 8;
+const URGENT_MS = 4 * 86_400_000; // urgent news cools to heads-up after four days
 
 /** Turn one feed's XML into items, newest first. */
-export function normaliseFeed(def: FeedDef, xml: string): NewsItem[] {
+export function normaliseFeed(def: FeedDef, xml: string, now = new Date()): NewsItem[] {
   const items: NewsItem[] = [];
   for (const e of parseFeed(xml, { images: !def.github })) {
     if (def.only && !def.only.test(e.title)) continue;
     if (def.skip && def.skip.test(e.title)) continue;
-    const { severity, action } = rate(def, e.title, e.text);
+    const rated = rate(def, e.title, e.text);
+    // "Urgent" means act now. A week-old warning is still worth knowing, but it is no longer urgent.
+    const stale = now.getTime() - Date.parse(e.time) > URGENT_MS;
+    const severity: Severity = rated.severity === 'urgent' && stale ? 'heads-up' : rated.severity;
+    const action = stale && rated.severity === 'urgent' ? 'Check that your sites were updated, and look for signs of a break-in if they were not.' : rated.action;
     items.push({
       id: `feed:${def.id}:${e.link}`,
       category: def.category,

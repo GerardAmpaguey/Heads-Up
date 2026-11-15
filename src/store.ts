@@ -53,7 +53,7 @@ export async function refresh(kv: KV, doFetch: Fetch = fetch, now = new Date()):
       return lists.flat();
     },
   };
-  for (const def of FEEDS) jobs[def.id] = async () => normaliseFeed(def, await getText(doFetch, def.url));
+  for (const def of FEEDS) jobs[def.id] = async () => normaliseFeed(def, await getText(doFetch, def.url), now);
 
   const sources: Record<string, SourceState> = {};
   await Promise.all(
