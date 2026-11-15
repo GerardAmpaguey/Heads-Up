@@ -1,7 +1,7 @@
 import { actionFor, type Alert, type Severity } from './alerts.ts';
 
 // USGS Earthquake Hazards Program summary feed (public domain, no key; they ask for credit).
-export const USGS_URL = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week.geojson';
+export const USGS_URL = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_month.geojson';
 
 type Feature = {
   id?: string;

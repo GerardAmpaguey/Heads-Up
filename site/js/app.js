@@ -14,7 +14,7 @@ let memoryPlace;
 function loadPlace() {
   try {
     const p = JSON.parse(localStorage.getItem(PLACE_KEY) || 'null');
-    if (p && Number.isFinite(p.lat) && Number.isFinite(p.lon) && typeof p.label === 'string') return p;
+    if (p && Number.isFinite(p.lat) && Number.isFinite(p.lon) && typeof p.label === 'string') return { lat: p.lat, lon: p.lon, label: p.label, name: typeof p.name === 'string' ? p.name : undefined, cc: typeof p.cc === 'string' ? p.cc : undefined };
   } catch {}
   return memoryPlace ?? null;
 }
@@ -100,14 +100,20 @@ function applyFeed(data) {
     ...common(a), category: 'hazard',
     km: a.distanceKm == null ? null : Math.round(a.distanceKm), bearing: a.bearing ?? null,
   }));
+  const local = (data.local?.items || []).map((a) => ({ ...common(a), category: 'hazard', km: null, bearing: null, local: true }));
   const news = (data.news || []).map((a) => ({ ...common(a), km: null, bearing: null }));
   ITEMS.length = 0;
-  ITEMS.push(...hazards, ...news);
+  ITEMS.push(...hazards, ...local, ...news);
 }
 
 async function loadFeed() {
   try {
-    const query = place ? `?lat=${place.lat}&lon=${place.lon}` : '';
+    let query = '';
+    if (place) {
+      query = `?lat=${place.lat}&lon=${place.lon}`;
+      if (place.name) query += `&city=${encodeURIComponent(place.name)}`;
+      if (place.cc) query += `&cc=${encodeURIComponent(place.cc)}`;
+    }
     const res = await fetch(`/api/alerts${query}`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
     if (!res.ok) throw new Error(`status ${res.status}`);
     const data = await res.json();
@@ -162,7 +168,7 @@ async function searchPlaces(text, signal) {
     const label = [r.name, r.admin1, r.country].filter(Boolean).join(', ');
     if (seen.has(label)) continue;
     seen.add(label);
-    out.push({ label, lat: Math.round(r.latitude * 100) / 100, lon: Math.round(r.longitude * 100) / 100 });
+    out.push({ label, name: r.name, cc: r.country_code, lat: Math.round(r.latitude * 100) / 100, lon: Math.round(r.longitude * 100) / 100 });
   }
   return out;
 }
@@ -353,6 +359,30 @@ function tileGrid(items, empty) {
   return el('ul', { class: 'tiles' }, items.map((i) => el('li', {}, tile(i))));
 }
 
+/* A long list shown a page at a time, with a Load more button. */
+function paged(items, empty, build, listClass, pageSize) {
+  if (!items.length) return el('p', { class: 'empty' }, empty);
+  const list = el('ul', { class: listClass });
+  const button = el('button', { class: 'btn btn--ghost more', type: 'button' });
+  let shown = 0;
+  const showMore = () => {
+    const next = items.slice(shown, shown + pageSize);
+    list.append(...next.map((i) => el('li', {}, build(i))));
+    shown += next.length;
+    button.hidden = shown >= items.length;
+    button.textContent = `Load more (${items.length - shown} left)`;
+  };
+  button.addEventListener('click', () => {
+    const first = list.children.length;
+    showMore();
+    list.children[first]?.querySelector('button')?.focus({ preventScroll: true });
+  });
+  showMore();
+  return el('div', { class: 'paged' }, list, el('div', { class: 'more-wrap' }, button));
+}
+
+const pagedTiles = (items, empty) => paged(items, empty, tile, 'tiles', 12);
+
 function panel(title, ...kids) {
   return el('section', { class: 'panel' }, el('h2', { class: 'panel__title' }, title), ...kids);
 }
@@ -467,8 +497,8 @@ function latestBlock() {
 
 const EMPTY = {
   hazard: 'No active hazards near you right now. We check every 30 minutes.',
-  webdev: 'No web dev news in the last two weeks.',
-  ai: 'No AI news in the last two weeks.',
+  webdev: 'No web dev news in the last month.',
+  ai: 'No AI news in the last month.',
 };
 
 function homeView() {
@@ -526,13 +556,13 @@ function categoryView(id, filter) {
         chips.map(([k, label, n]) => el('a', { class: 'chip', href: k === 'all' ? base : `${base}?s=${k}`, 'aria-current': k === filter ? 'true' : false }, `${label} `, el('span', { class: 'chip__n' }, String(n)))),
       ),
     ),
-    tileGrid(shown, all.length ? 'Nothing in this group right now.' : EMPTY[id]),
+    pagedTiles(shown, all.length ? 'Nothing in this group right now.' : EMPTY[id]),
   ];
 }
 
 function latestView(filter) {
   const all = forLatest().sort(byNew);
-  const shown = (filter === 'all' ? all : all.filter((i) => i.severity === filter)).slice(0, 60);
+  const shown = filter === 'all' ? all : all.filter((i) => i.severity === filter);
   const chips = [['all', 'All', all.length], ...Object.entries(SEVERITY).map(([k, v]) => [k, v.label, all.filter((i) => i.severity === k).length])];
   return [
     pageHead('Latest', 'Everything, newest first.',
@@ -540,9 +570,7 @@ function latestView(filter) {
         chips.map(([k, label, n]) => el('a', { class: 'chip', href: k === 'all' ? '#/latest' : `#/latest?s=${k}`, 'aria-current': k === filter ? 'true' : false }, `${label} `, el('span', { class: 'chip__n' }, String(n)))),
       ),
     ),
-    shown.length
-      ? el('ul', { class: 'list list--page' }, shown.map((i) => el('li', {}, story(i, true))))
-      : el('p', { class: 'empty' }, 'Nothing in this group right now.'),
+    paged(shown, 'Nothing in this group right now.', (i) => story(i, true), 'list list--page', 15),
   ];
 }
 
@@ -562,7 +590,7 @@ function watchlistView() {
         }, t)),
       ),
     ),
-    tileGrid(mine, watch.size ? 'Nothing new for these tools right now.' : 'No tools picked yet. Choose some above.'),
+    pagedTiles(mine, watch.size ? 'Nothing new for these tools right now.' : 'No tools picked yet. Choose some above.'),
   ];
 }
 
@@ -571,7 +599,7 @@ function searchView(q) {
   const hits = sorted(ITEMS.filter((i) => [i.title, i.summary, i.source, ...i.tags, CATEGORIES[i.category].label].join(' ').toLowerCase().includes(needle)));
   return [
     pageHead('Search', needle ? `${hits.length} result${hits.length === 1 ? '' : 's'} for “${q.trim()}”` : 'Type something to search.'),
-    needle ? tileGrid(hits, 'No alerts match that search.') : null,
+    needle ? pagedTiles(hits, 'No alerts match that search.') : null,
   ];
 }
 

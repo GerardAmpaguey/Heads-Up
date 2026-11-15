@@ -3,7 +3,7 @@
 
 import type { NewsItem, Severity } from './alerts.ts';
 
-export type Entry = { title: string; link: string; time: string; text: string; image?: string };
+export type Entry = { title: string; link: string; time: string; text: string; image?: string; publisher?: string };
 
 export type FeedDef = {
   id: string;
@@ -30,9 +30,24 @@ export const FEEDS: FeedDef[] = [
   { id: 'wrangler', name: 'Wrangler releases', url: 'https://github.com/cloudflare/workers-sdk/releases.atom', category: 'webdev', kind: 'release', tags: ['Cloudflare'], label: 'Wrangler', github: true, only: /^wrangler@/i, skip: PRERELEASE },
   { id: 'elementor', name: 'Elementor', url: 'https://elementor.com/blog/feed/', category: 'webdev', kind: 'news', tags: ['Elementor'] },
   { id: 'figma', name: 'Figma', url: 'https://www.figma.com/blog/feed/atom.xml', category: 'webdev', kind: 'news', tags: ['Figma'] },
+  { id: 'wptavern', name: 'WP Tavern', url: 'https://wptavern.com/feed', category: 'webdev', kind: 'news', tags: ['WordPress'] },
+  { id: 'smashing', name: 'Smashing Magazine', url: 'https://www.smashingmagazine.com/feed/', category: 'webdev', kind: 'news', tags: [] },
+  { id: 'csstricks', name: 'CSS-Tricks', url: 'https://css-tricks.com/feed/', category: 'webdev', kind: 'news', tags: [] },
+  { id: 'webdev', name: 'web.dev', url: 'https://web.dev/feed.xml', category: 'webdev', kind: 'news', tags: [] },
+  { id: 'chrome', name: 'Chrome for Developers', url: 'https://developer.chrome.com/static/blog/feed.xml', category: 'webdev', kind: 'news', tags: [] },
+  { id: 'cloudflare', name: 'Cloudflare Blog', url: 'https://blog.cloudflare.com/rss/', category: 'webdev', kind: 'news', tags: ['Cloudflare'] },
+  { id: 'ghchangelog', name: 'GitHub Changelog', url: 'https://github.blog/changelog/feed/', category: 'webdev', kind: 'news', tags: [] },
+  { id: 'vite', name: 'Vite releases', url: 'https://github.com/vitejs/vite/releases.atom', category: 'webdev', kind: 'release', tags: [], label: 'Vite', github: true, only: /^v\d/i, skip: PRERELEASE },
+  { id: 'react', name: 'React releases', url: 'https://github.com/facebook/react/releases.atom', category: 'webdev', kind: 'release', tags: [], label: 'React', github: true, skip: PRERELEASE },
+  { id: 'typescript', name: 'TypeScript releases', url: 'https://github.com/microsoft/TypeScript/releases.atom', category: 'webdev', kind: 'release', tags: [], label: 'TypeScript', github: true, skip: PRERELEASE },
   { id: 'openai', name: 'OpenAI', url: 'https://openai.com/news/rss.xml', category: 'ai', kind: 'news', tags: [] },
   { id: 'deepmind', name: 'Google DeepMind', url: 'https://deepmind.google/blog/rss.xml', category: 'ai', kind: 'news', tags: [] },
   { id: 'huggingface', name: 'Hugging Face', url: 'https://huggingface.co/blog/feed.xml', category: 'ai', kind: 'news', tags: [] },
+  { id: 'googleai', name: 'Google AI', url: 'https://blog.google/technology/ai/rss/', category: 'ai', kind: 'news', tags: [] },
+  { id: 'verge-ai', name: 'The Verge', url: 'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml', category: 'ai', kind: 'news', tags: [] },
+  { id: 'techcrunch-ai', name: 'TechCrunch', url: 'https://techcrunch.com/category/artificial-intelligence/feed/', category: 'ai', kind: 'news', tags: [] },
+  { id: 'mittr', name: 'MIT Technology Review', url: 'https://www.technologyreview.com/topic/artificial-intelligence/feed', category: 'ai', kind: 'news', tags: [] },
+  { id: 'willison', name: 'Simon Willison', url: 'https://simonwillison.net/atom/everything/', category: 'ai', kind: 'news', tags: [] },
 ];
 
 // ---------- reading RSS and Atom ----------
@@ -130,7 +145,8 @@ export function parseFeed(xml: string, { images = true }: { images?: boolean } =
     const ms = Date.parse(when);
     if (!title || !link || !Number.isFinite(ms)) continue;
     const text = shorten(plainText(inner(block, 'description') ?? inner(block, 'summary') ?? inner(block, 'content:encoded') ?? inner(block, 'content') ?? ''));
-    out.push({ title, link, time: new Date(ms).toISOString(), text, image: images ? imageOf(block) : undefined });
+    const publisher = plainText(inner(block, 'source') ?? '') || undefined;
+    out.push({ title, link, time: new Date(ms).toISOString(), text, image: images ? imageOf(block) : undefined, publisher });
   }
   return out;
 }
@@ -192,7 +208,7 @@ function headline(def: FeedDef, title: string): string {
   return v ? `${def.label} ${v[1]} released` : `${def.label}: ${title}`;
 }
 
-const PER_FEED = 8;
+const PER_FEED = 20;
 const URGENT_MS = 4 * 86_400_000; // urgent news cools to heads-up after four days
 
 /** Turn one feed's XML into items, newest first. */

@@ -1,5 +1,6 @@
-import { personalise, type Alert, type NewsItem, type Place } from './alerts.ts';
+import { personalise, type Alert, type LocalItem, type NewsItem, type Place } from './alerts.ts';
 import { allItems, isStale, load, refresh, type KV } from './store.ts';
+import { cacheKey, countryCode, normaliseLocal, placeName, searchUrl, type LocalPlace } from './local.ts';
 
 type Env = {
   ALERTS: KV;
@@ -35,7 +36,40 @@ export function placeFrom(request: Request): Place | null {
   };
 }
 
-const NEWS_LIMIT = 80;
+const NEWS_LIMIT = 200;
+
+/** The city and country to look up local news for: the one the visitor picked, else their connection's. */
+export function localPlaceFrom(request: Request): LocalPlace | null {
+  const url = new URL(request.url);
+  const cf = (request as unknown as { cf?: Record<string, unknown> }).cf ?? {};
+  const picked = num(url.searchParams.get('lat')) != null && num(url.searchParams.get('lon')) != null;
+  const name = placeName(picked ? url.searchParams.get('city') : (cf.city as string | undefined));
+  if (!name) return null;
+  return { name, cc: countryCode(picked ? url.searchParams.get('cc') : (cf.country as string | undefined)) };
+}
+
+type EdgeCache = { match(req: Request): Promise<Response | undefined>; put(req: Request, res: Response): Promise<void> };
+
+/** Local news, cached for 30 minutes per place so visitors never wait on, or hammer, the news source. */
+async function localNews(request: Request, ctx: Ctx): Promise<{ place: string | null; ok: boolean; items: LocalItem[] }> {
+  const place = localPlaceFrom(request);
+  if (!place) return { place: null, ok: true, items: [] };
+  const cache = (globalThis as unknown as { caches?: { default?: EdgeCache } }).caches?.default;
+  const key = new Request(cacheKey(place));
+  try {
+    let hit = await cache?.match(key);
+    if (!hit) {
+      const res = await fetch(searchUrl(place), { headers: { 'user-agent': 'Heads-Up/0.1 (+https://heads-up.ampagueyg.workers.dev)' }, signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(`news answered ${res.status}`);
+      const items = normaliseLocal(await res.text(), place);
+      hit = new Response(JSON.stringify(items), { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=1800' } });
+      if (cache) ctx.waitUntil(cache.put(key, hit.clone()).catch(() => undefined));
+    }
+    return { place: place.name, ok: true, items: (await hit.json()) as LocalItem[] };
+  } catch {
+    return { place: place.name, ok: false, items: [] };
+  }
+}
 
 async function alertsResponse(request: Request, env: Env, ctx: Ctx): Promise<Response> {
   const stored = await load(env.ALERTS);
@@ -50,6 +84,7 @@ async function alertsResponse(request: Request, env: Env, ctx: Ctx): Promise<Res
     .filter((i): i is NewsItem => i.category !== 'hazard')
     .sort((a, b) => Date.parse(b.time) - Date.parse(a.time))
     .slice(0, NEWS_LIMIT);
+  const local = await localNews(request, ctx);
   const sources = Object.fromEntries(Object.entries(stored?.sources ?? {}).map(([k, v]) => [k, { ok: v.ok, updatedAt: v.updatedAt, ...(v.ok ? {} : { error: v.error }) }]));
   return json(
     {
@@ -58,6 +93,7 @@ async function alertsResponse(request: Request, env: Env, ctx: Ctx): Promise<Res
       location: place ? { country: place.country ?? null, city: place.city ?? null, approximate: !place.chosen } : null,
       sources,
       items,
+      local,
       news,
     },
     200,

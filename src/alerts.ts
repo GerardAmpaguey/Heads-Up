@@ -24,6 +24,21 @@ export type Alert = {
   tags: string[];
 };
 
+/** A news story about trouble near the visitor (not an official alert). Has no coordinates. */
+export type LocalItem = {
+  id: string;
+  category: 'hazard';
+  kind: 'news';
+  severity: Severity;
+  title: string;
+  summary: string;
+  action: string;
+  source: string; // the publisher
+  url: string;
+  time: string; // ISO 8601, UTC
+  tags: string[];
+};
+
 /** A web dev or AI news item. Same fields as a hazard alert where they overlap, but no location. */
 export type NewsItem = {
   id: string;
@@ -108,7 +123,7 @@ const WORLD_KM = 1500;
  *   Events within NEAR_KM are marked near, and an event close by is bumped one step.
  * - Without a location: global heads-up and urgent alerts only.
  */
-export function personalise(alerts: Alert[], place: Place | null, limit = 40): PersonalAlert[] {
+export function personalise(alerts: Alert[], place: Place | null, limit = 80): PersonalAlert[] {
   const out: PersonalAlert[] = [];
   for (const a of alerts) {
     const km = place && a.lat != null && a.lon != null ? Math.round(distanceKm(place.lat, place.lon, a.lat, a.lon)) : null;

@@ -15,8 +15,8 @@ export type Stored = { updatedAt: string; sources: Record<string, SourceState> }
 
 export const KEY = 'alerts:v2';
 export const STALE_MS = 45 * 60_000; // the cron runs every 30 minutes; a visit refreshes only if that has been missed
-const KEEP_HAZARD_MS = 7 * 86_400_000; // forget hazard alerts older than a week
-const KEEP_NEWS_MS = 14 * 86_400_000; // and news older than two weeks
+const KEEP_HAZARD_MS = 14 * 86_400_000; // forget hazard alerts older than two weeks
+const KEEP_NEWS_MS = 30 * 86_400_000; // and news older than a month
 const UA = 'Heads-Up/0.1 (+https://heads-up.ampagueyg.workers.dev)';
 
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;

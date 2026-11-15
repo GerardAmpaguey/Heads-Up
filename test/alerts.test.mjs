@@ -150,10 +150,10 @@ test('personalise without a location hides fyi and keeps global heads-up and urg
 
 // ---------- refresh and storage ----------
 
-test('refresh stores both sources and drops alerts older than a week', async () => {
+test('refresh stores both sources and drops hazard alerts older than two weeks', async () => {
   const kv = new FakeKV();
   const old = structuredClone(usgsFeed);
-  old.features.push({ id: 'old', properties: { mag: 6, place: 'Old', time: hoursAgo(24 * 9), type: 'earthquake' }, geometry: { coordinates: [0, 0, 0] } });
+  old.features.push({ id: 'old', properties: { mag: 6, place: 'Old', time: hoursAgo(24 * 20), type: 'earthquake' }, geometry: { coordinates: [0, 0, 0] } });
   const stored = await refresh(kv, fakeFetch({ 'usgs.gov': () => Response.json(old) }), NOW);
   assert.equal(stored.sources.usgs.ok, true);
   assert.equal(stored.sources.gdacs.ok, true);

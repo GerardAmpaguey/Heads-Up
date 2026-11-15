@@ -232,7 +232,7 @@ main:focus, main:focus-visible { outline: none; }
 .chip[aria-current='true'], .chip[aria-pressed='true'] { background: var(--navy); border-color: var(--navy); color: #fff; }
 .chip[aria-current='true'] .chip__n { color: #c3cdee; }
 .chip[aria-pressed='true']::before { content: '✓'; font-weight: 800; }
-.page-head + .tiles, .page-head + .list, .page-head + .empty { margin-top: 1.75rem; }
+.page-head + .paged, .page-head + .tiles, .page-head + .list, .page-head + .empty { margin-top: 1.75rem; }
 .list--page { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 0 1.25rem; }
 .list--page > li + li { border-top: 1px solid var(--line); }
 .list--page .story { grid-template-columns: 7.5rem minmax(0, 1fr); padding-block: 1.1rem; }
@@ -334,3 +334,7 @@ main:focus, main:focus-visible { outline: none; }
   .search { min-width: 5.5rem; }
   .search input { padding-left: 2.2rem; }
 }
+
+.paged > .tiles { margin-top: 0; }
+.more-wrap { display: flex; justify-content: center; margin-top: 1.75rem; }
+.more[hidden] { display: none; }
