@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker, { localPlaceFrom, pickNews } from '../src/worker.ts';
-import { bingUrl, countryCode, normaliseLocal, placeName, rateLocal, realLink, searchUrl } from '../src/local.ts';
+import { localFeedsFor, bingUrl, countryCode, normaliseLocal, placeName, rateLocal, realLink, searchUrl } from '../src/local.ts';
 
 const NOW = new Date('2026-11-15T12:00:00Z');
 const at = (h) => new Date(NOW.getTime() - h * 3_600_000).toUTCString();
@@ -140,4 +140,13 @@ test('general mode asks for any news about the place; showbiz and unrelated stor
   const xml = `<rss><channel>${item('City council approves Baguio water rehabilitation plan', 'Sun', 20, 'p')}${item('Actress spotted in Baguio for movie shoot', 'Push', 20, 'q')}${item('Mindoro unveils lake makeover', 'ABS', 20, 'r')}</channel></rss>`;
   const items = normaliseLocal(xml, { name: 'Baguio' }, NOW);
   assert.deepEqual(items.map((i) => [i.title, i.severity]), [['City council approves Baguio water rehabilitation plan', 'fyi']]);
+});
+
+test('a local paper\'s own feed is read, and its stories count as about the area', () => {
+  const pub = new Date(NOW.getTime() - 40 * 3_600_000).toUTCString();
+  const wp = `<rss><channel><item><title>BWD warns of long-term groundwater supply risks</title><link>https://baguioheraldexpressonline.com/bwd-warns-of-long-term-groundwater-supply-risks/</link><pubDate>${pub}</pubDate><description>Groundwater is finite and under growing pressure as hotels and tourism expand, the water district says.</description></item><item><title>Concert tickets on sale this weekend</title><link>https://baguioheraldexpressonline.com/concert/</link><pubDate>${pub}</pubDate><description>x</description></item></channel></rss>`;
+  const items = normaliseLocal([], { name: 'Baguio' }, NOW, 30, [{ publisher: 'Baguio Herald Express', xml: wp }]);
+  assert.deepEqual(items.map((i) => [i.title, i.severity, i.source]), [['BWD warns of long-term groundwater supply risks', 'heads-up', 'Baguio Herald Express']]);
+  assert.equal(localFeedsFor({ name: 'Baguio City' }).length, 1);
+  assert.equal(localFeedsFor({ name: 'Manila' }).length, 0);
 });

@@ -11,11 +11,10 @@ Front end only, filled with **demo data** (`site/js/data.js`). Nothing on the pa
 A news front page, built for scanning:
 
 - Lead story with a stacked list of the next most important alerts beside it
-- "Latest" list with thumbnails, plus a sidebar (urgent now, your watchlist, what we watch)
+- "Latest" list with thumbnails, plus a sidebar (urgent now, what we watch)
 - A tile section per topic (Around you, Web dev, AI) with "View more +"
-- Section tabs under the masthead: Home, Around you, Web dev, AI, Latest, Watchlist
+- Section tabs under the masthead: Home, Around you, Web dev, AI, Latest
 - Click any story for what to do and a link to the source
-- Watchlist: pick the tools you use, saved in the browser
 - Search across all alerts
 
 ## Photos

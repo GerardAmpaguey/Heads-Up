@@ -1,6 +1,6 @@
 import { personalise, type Alert, type LocalItem, type NewsItem, type Place } from './alerts.ts';
 import { allItems, isStale, load, refresh, type KV } from './store.ts';
-import { bingUrl, cacheKey, countryCode, normaliseLocal, placeName, searchUrl, type LocalPlace } from './local.ts';
+import { bingUrl, cacheKey, countryCode, localFeedsFor, normaliseLocal, placeName, searchUrl, type LocalPlace } from './local.ts';
 
 type Env = {
   ALERTS: KV;
@@ -81,9 +81,12 @@ async function localNews(request: Request, ctx: Ctx): Promise<{ place: string | 
         return res.text();
       };
       const results = await Promise.allSettled([ask(searchUrl(place)), ask(bingUrl(place)), ask(searchUrl(place, 'general')), ask(bingUrl(place, 'general'))]);
+      const feeds = localFeedsFor(place);
+      const paperResults = await Promise.allSettled(feeds.map((f) => ask(f.url)));
+      const papers = paperResults.flatMap((r, i) => (r.status === 'fulfilled' ? [{ publisher: feeds[i]!.publisher, xml: r.value }] : []));
       const xmls = results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map((r) => r.value);
-      if (xmls.length === 0) throw new Error(results.map((r) => (r as PromiseRejectedResult).reason?.message ?? 'failed').join('; '));
-      const items = normaliseLocal(xmls, place);
+      if (xmls.length === 0 && papers.length === 0) throw new Error(results.map((r) => (r as PromiseRejectedResult).reason?.message ?? 'failed').join('; '));
+      const items = normaliseLocal(xmls, place, new Date(), 30, papers);
       hit = new Response(JSON.stringify(items), { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=1800' } });
       if (cache) ctx.waitUntil(cache.put(key, hit.clone()).catch(() => undefined));
     }

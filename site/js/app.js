@@ -1,4 +1,4 @@
-import { CATEGORIES, SEVERITY, STACK } from './data.js';
+import { CATEGORIES, SEVERITY } from './data.js';
 
 // Everything on the page comes from /api/alerts. Nothing is made up.
 const ITEMS = [];
@@ -64,26 +64,9 @@ const ICONS = {
 
 /* ---------- state ---------- */
 
-const WATCH_KEY = 'headsup.watchlist';
-let memoryWatch = null;
-
-function loadWatch() {
-  try {
-    const raw = localStorage.getItem(WATCH_KEY);
-    if (raw) return new Set(JSON.parse(raw).filter((t) => STACK.includes(t)));
-  } catch {}
-  return new Set(memoryWatch || []);
-}
-function saveWatch(set) {
-  memoryWatch = [...set];
-  try { localStorage.setItem(WATCH_KEY, JSON.stringify(memoryWatch)); } catch {}
-}
-let watch = loadWatch();
-
 const bySeverityThenNew = (a, b) => SEVERITY[a.severity].rank - SEVERITY[b.severity].rank || a.ago - b.ago;
 const byNew = (a, b) => a.ago - b.ago;
 const sorted = (list) => [...list].sort(bySeverityThenNew);
-const watched = () => ITEMS.filter((i) => i.tags.some((t) => watch.has(t)));
 const catRoute = (id) => (id === 'hazard' ? '#/around' : `#/${id}`);
 
 
@@ -482,33 +465,16 @@ const TABS = [
   { id: 'ai', label: 'AI & tech', href: '#/ai' },
   { id: 'planet', label: 'Planet', href: '#/planet' },
   { id: 'latest', label: 'Latest', href: '#/latest' },
-  { id: 'watchlist', label: 'Watchlist', href: '#/watchlist' },
 ];
 
 function renderNav(active) {
-  const count = watched().length;
   document.getElementById('tabs').replaceChildren(...TABS.map((t) =>
     el('a', { class: 'tab', href: t.href, 'aria-current': t.id === active ? 'page' : false },
       t.label,
-      t.id === 'watchlist' && count > 0 && el('span', { class: 'badge', 'aria-label': `${count} items` }, String(count)),
     )));
 }
 
 /* ---------- views ---------- */
-
-function watchPanel() {
-  const mine = sorted(watched());
-  if (!mine.length) {
-    return panel('Your watchlist',
-      el('p', { class: 'panel__text' }, 'Pick the tools you use, like WordPress or Astro, and their news shows up here.'),
-      el('a', { class: 'panel__link', href: '#/watchlist' }, 'Choose tools'),
-    );
-  }
-  return panel('Your watchlist',
-    el('ul', { class: 'panel__list' }, mine.slice(0, 4).map((i) => el('li', {}, story(i)))),
-    el('a', { class: 'panel__link', href: '#/watchlist' }, 'Edit watchlist'),
-  );
-}
 
 function stateBlock() {
   if (feed.status === 'loading') return [el('p', { class: 'empty empty--state', role: 'status' }, 'Loading the latest alerts…')];
@@ -584,7 +550,6 @@ function homeView() {
             ? el('ul', { class: 'panel__list' }, urgent.map((i) => el('li', {}, story(i))))
             : el('p', { class: 'panel__text' }, 'Nothing urgent right now.'),
         ),
-        watchPanel(),
         panel('What we watch',
           el('ul', { class: 'watching' }, Object.entries(CATEGORIES).map(([id, m]) =>
             el('li', {}, el('a', { href: catRoute(id) }, el('strong', {}, m.label), el('span', {}, m.blurb))))),
@@ -636,26 +601,6 @@ function latestView(filter) {
   ];
 }
 
-function watchlistView() {
-  const mine = sorted(watched());
-  return [
-    pageHead('Watchlist', 'Pick the tools you use. News about them shows up here.',
-      el('div', { class: 'chips', role: 'group', 'aria-label': 'Tools to watch' },
-        STACK.map((t) => el('button', {
-          class: 'chip chip--toggle', type: 'button', 'aria-pressed': watch.has(t) ? 'true' : 'false',
-          onclick: () => {
-            watch.has(t) ? watch.delete(t) : watch.add(t);
-            saveWatch(watch);
-            route();
-            [...main.querySelectorAll('.chip--toggle')].find((b) => b.textContent === t)?.focus({ preventScroll: true });
-          },
-        }, t)),
-      ),
-    ),
-    pagedTiles(mine, watch.size ? 'Nothing new for these tools right now.' : 'No tools picked yet. Choose some above.'),
-  ];
-}
-
 function searchView(q) {
   const needle = q.trim().toLowerCase();
   const hits = sorted(ITEMS.filter((i) => [i.title, i.summary, i.source, ...i.tags, CATEGORIES[i.category].label].join(' ').toLowerCase().includes(needle)));
@@ -678,7 +623,6 @@ function route() {
   else if (path === 'ai') { active = 'ai'; view = categoryView('ai', params.get('s') || 'all'); }
   else if (path === 'planet') { active = 'planet'; view = categoryView('planet', params.get('s') || 'all'); }
   else if (path === 'latest') { active = 'latest'; view = latestView(params.get('s') || 'all'); }
-  else if (path === 'watchlist') { active = 'watchlist'; view = watchlistView(); }
   else if (path === 'search') { active = ''; view = searchView(params.get('q') || ''); }
   else view = homeView();
   if (feed.status !== 'ready' || feed.data?.warming) view = stateBlock() || view;

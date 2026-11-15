@@ -13,4 +13,3 @@ export const SEVERITY = {
   fyi: { label: 'FYI', rank: 2 },
 };
 
-export const STACK = ['WordPress', 'Elementor', 'Astro', 'Next.js', 'Tailwind', 'Cloudflare', 'PHP', 'Figma'];

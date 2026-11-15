@@ -10,7 +10,24 @@ const TOPICS = [
   'typhoon', 'tropical storm', 'earthquake', 'flood', 'landslide', 'volcano', 'tsunami', 'wildfire',
   'state of calamity', 'evacuation', 'power outage', 'class suspension', 'drought', 'outbreak',
   'curfew', 'state of emergency', 'airstrike', 'internet outage',
+  'water supply', 'water shortage', 'water interruption', 'groundwater', 'heat index', 'dengue', 'road closure',
 ];
+
+/** Local newspapers read directly, because search engines often miss them or bury them. A paper's feed is
+ *  used for the places it covers, and everything in it counts as being about that area. */
+export type LocalFeed = { publisher: string; url: string; places: string[] };
+export const LOCAL_FEEDS: LocalFeed[] = [
+  {
+    publisher: 'Baguio Herald Express',
+    url: 'https://baguioheraldexpressonline.com/feed/',
+    places: ['baguio', 'benguet', 'la trinidad', 'itogon', 'tuba', 'sablan', 'tublay', 'bauang', 'la union', 'san fernando', 'cordillera'],
+  },
+];
+
+export function localFeedsFor(place: LocalPlace): LocalFeed[] {
+  const n = place.name.toLowerCase();
+  return LOCAL_FEEDS.filter((f) => f.places.some((p) => n.includes(p)));
+}
 
 const NAME_OK = /^[\p{L}\p{N} .'’()-]{2,60}$/u;
 const CC_OK = /^[A-Za-z]{2}$/;
@@ -60,7 +77,7 @@ export function realLink(link: string): string {
 export const cacheKey = (place: LocalPlace) => `https://local-news.cache/${place.cc ?? 'xx'}/${encodeURIComponent(place.name.toLowerCase())}`;
 
 const URGENT = /\b(super typhoon|typhoon|signal no\.? ?[345]|tsunami|landfall|evacuat\w*|state of calamity|state of emergency|eruption|erupt\w*|magnitude [6-9](\.\d)?|airstrike|curfew|death toll)\b/i;
-const HEADS_UP = /\b(flood\w*|landslide|earthquake|quake|tropical storm|storm|warning|advisory|power outage|blackout|class(es)? suspen\w*|suspension of classes|volcan\w*|wildfire|fire|outbreak|drought|outage)\b/i;
+const HEADS_UP = /\b(flood\w*|landslide|earthquake|quake|tropical storm|storm|warning|advisory|power outage|blackout|class(es)? suspen\w*|suspension of classes|volcan\w*|wildfire|fire|outbreak|drought|outage|groundwater|water (supply|shortage|crisis|interruption)|supply risks?|shortage|heat index|dengue|rabies|road closure|rockslide|sinkhole)\b/i;
 const URGENT_MS = 2 * 86_400_000;
 const HAZARD_MS = 3 * 86_400_000; // older hazard stories are no longer "heads up"
 // Sports pages love words like "storm", "fire" and "flood".
@@ -81,10 +98,14 @@ const snippet = (text: string, title: string): string | null =>
 const norm = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
 /** Turn a Google News search feed into local items, newest first. Duplicate headlines are dropped. */
-export function normaliseLocal(xmls: string | string[], place: LocalPlace, now = new Date(), limit = 30): LocalItem[] {
+export function normaliseLocal(xmls: string | string[], place: LocalPlace, now = new Date(), limit = 30, papers: { publisher: string; xml: string }[] = []): LocalItem[] {
   const seen = new Set<string>();
   const items: LocalItem[] = [];
-  for (const e of [xmls].flat().flatMap((xml) => parseFeed(xml, { images: false }))) {
+  const found = [
+    ...[xmls].flat().flatMap((xml) => parseFeed(xml, { images: false }).map((e) => ({ e, paper: false }))),
+    ...papers.flatMap((p) => parseFeed(p.xml, { images: false }).map((e) => ({ e: { ...e, publisher: e.publisher || p.publisher }, paper: true }))),
+  ];
+  for (const { e, paper } of found) {
     const publisher = e.publisher || 'News';
     // Google adds " - Publisher" to every headline.
     const suffix = ` - ${publisher}`;
@@ -97,7 +118,7 @@ export function normaliseLocal(xmls: string | string[], place: LocalPlace, now =
     // Search results are loose. A story must be about the place (or, for hazards, about somewhere close by).
     // Hazard stories keep their rating; other stories that name the place are kept as FYI. A hazard story
     // that does not name the place counts one step lower, and is dropped if that leaves nothing.
-    const mentions = `${title} ${e.text}`.toLowerCase().includes(place.name.toLowerCase());
+    const mentions = paper || `${title} ${e.text}`.toLowerCase().includes(place.name.toLowerCase());
     let severity = rateLocal(title, age);
     if (severity !== 'fyi' && age > HAZARD_MS) severity = 'fyi';
     if (!mentions) severity = severity === 'urgent' ? 'heads-up' : 'fyi';
