@@ -29,20 +29,6 @@
   color-scheme: light;
 }
 
-[data-theme='dark'] {
-  --page: #0c0d10;
-  --paper: #15171b;
-  --surface: #1c1f24;
-  --ink: #f1f2f4;
-  --muted: #9aa1ad;
-  --line: #272b32;
-  --rule: #f1f2f4;
-  --bar: #060708;
-  --blue: #8aa9ff;
-  --fyi-line: #4a505b;
-  color-scheme: dark;
-}
-
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; scroll-padding-top: 8rem; }
 body {
@@ -78,18 +64,14 @@ main:focus, main:focus-visible { outline: none; }
 .masthead__tag { display: none; color: var(--bar-muted); font-size: 0.85rem; }
 .masthead__tools { display: flex; flex: 1; align-items: center; justify-content: flex-end; gap: 0.5rem; min-width: 0; }
 
-.where, .iconbtn {
+.where {
   display: inline-flex; align-items: center; gap: 0.4rem; border: 1px solid rgb(255 255 255 / 0.2); border-radius: 999px;
   background: transparent; color: var(--on-bar); font: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer;
 }
 .where { padding: 0.4rem 0.8rem; white-space: nowrap; max-width: 7.5rem; min-width: 0; }
 .where span { overflow: hidden; text-overflow: ellipsis; }
 .where__caret { display: none; flex: none; opacity: 0.7; }
-.iconbtn { justify-content: center; width: 2.4rem; height: 2.4rem; padding: 0; flex: none; }
-.where:hover, .iconbtn:hover { border-color: rgb(255 255 255 / 0.55); background: rgb(255 255 255 / 0.08); }
-.theme__moon { display: none; }
-[data-theme='dark'] .theme__sun { display: none; }
-[data-theme='dark'] .theme__moon { display: block; }
+.where:hover { border-color: rgb(255 255 255 / 0.55); background: rgb(255 255 255 / 0.08); }
 
 .search { position: relative; display: flex; flex: 1 1 0; align-items: center; min-width: 5rem; max-width: 15rem; }
 .search svg { position: absolute; left: 0.75rem; color: var(--bar-muted); pointer-events: none; }
@@ -117,7 +99,6 @@ main:focus, main:focus-visible { outline: none; }
   .masthead__tools { flex-basis: 100%; order: 3; justify-content: stretch; }
   .where { max-width: 9rem; flex: none; }
   .search { max-width: none; flex: 1 1 0; }
-  .theme-slot { margin-left: auto; }
   .brand { margin-right: auto; }
 }
 @media (min-width: 640px) {

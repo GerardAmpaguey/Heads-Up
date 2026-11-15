@@ -103,8 +103,8 @@ export function normaliseLocal(xmls: string | string[], place: LocalPlace, now =
   const seen = new Set<string>();
   const items: LocalItem[] = [];
   const found = [
-    ...[xmls].flat().flatMap((xml) => parseFeed(xml, { images: false }).map((e) => ({ e, paper: false }))),
-    ...papers.flatMap((p) => parseFeed(p.xml, { images: false }).map((e) => ({ e: { ...e, publisher: e.publisher || p.publisher }, paper: true }))),
+    ...[xmls].flat().flatMap((xml) => parseFeed(xml).map((e) => ({ e, paper: false }))),
+    ...papers.flatMap((p) => parseFeed(p.xml).map((e) => ({ e: { ...e, publisher: e.publisher || p.publisher }, paper: true }))),
   ];
   for (const { e, paper } of found) {
     const publisher = e.publisher || 'News';
@@ -135,6 +135,7 @@ export function normaliseLocal(xmls: string | string[], place: LocalPlace, now =
       source: publisher,
       url: realLink(e.link),
       time: e.time,
+      ...(e.image ? { image: e.image, imageCredit: publisher } : {}),
       tags: ['Local news'],
     });
   }

@@ -36,6 +36,8 @@ export type LocalItem = {
   source: string; // the publisher
   url: string;
   time: string; // ISO 8601, UTC
+  image?: string;
+  imageCredit?: string;
   tags: string[];
 };
 

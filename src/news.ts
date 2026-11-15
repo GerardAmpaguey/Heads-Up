@@ -133,6 +133,11 @@ function imageOf(block: string): string | undefined {
       if (u) return u;
     }
   }
+  const bing = /<News:Image>\s*([^<\s]+)\s*<\/News:Image>/i.exec(block);
+  if (bing) {
+    const u = httpsUrl(decode(bing[1]!));
+    if (u) return u;
+  }
   const body = unwrap(inner(block, 'content:encoded') ?? inner(block, 'description') ?? inner(block, 'content') ?? '');
   for (const img of decode(body).matchAll(/<img\b[^>]*>/gi)) {
     const u = httpsUrl(attr(img[0], 'src'));

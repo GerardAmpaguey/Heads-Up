@@ -150,3 +150,14 @@ test('a local paper\'s own feed is read, and its stories count as about the area
   assert.equal(localFeedsFor({ name: 'Baguio City' }).length, 1);
   assert.equal(localFeedsFor({ name: 'Manila' }).length, 0);
 });
+
+test('local stories keep a photo from the paper feed or from Bing\'s News:Image', () => {
+  const pub = new Date(NOW.getTime() - 5 * 3_600_000).toUTCString();
+  const wp = `<rss><channel><item><title>Water district warns of shortage</title><link>https://p.test/a/</link><pubDate>${pub}</pubDate><description>Short.</description><content:encoded><![CDATA[<p><img src="https://p.test/wp-content/a.jpg" /></p>]]></content:encoded></item></channel></rss>`;
+  const bing = `<rss><channel><item><title>Baguio flood warning raised</title><link>https://www.bing.com/news/apiclick.aspx?url=https%3A%2F%2Fq.test%2Fb</link><pubDate>${pub}</pubDate><description>A flood warning is up for Baguio and nearby towns today.</description><News:Source>Q</News:Source><News:Image>https://www.bing.com/th?id=ONE.b.jpg&amp;pid=News</News:Image></item></channel></rss>`;
+  const items = normaliseLocal([bing], { name: 'Baguio' }, NOW, 30, [{ publisher: 'Herald', xml: wp }]);
+  const by = Object.fromEntries(items.map((i) => [i.title, i]));
+  assert.equal(by['Water district warns of shortage'].image, 'https://p.test/wp-content/a.jpg');
+  assert.equal(by['Water district warns of shortage'].imageCredit, 'Herald');
+  assert.match(by['Baguio flood warning raised'].image, /^https:\/\/www\.bing\.com\/th\?id=ONE\.b\.jpg&pid=News$/);
+});

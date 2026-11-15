@@ -149,7 +149,10 @@ async function searchPlaces(text, signal) {
   const out = [];
   for (const r of data.results || []) {
     if (!Number.isFinite(r.latitude) || !Number.isFinite(r.longitude)) continue;
-    const label = [r.name, r.admin1, r.country].filter(Boolean).join(', ');
+    // In the Philippines the source's "admin1" is an old region grouping (it files Benguet under Ilocos), so
+    // use the province instead. Elsewhere admin1 is the state or province.
+    const area = r.country_code === 'PH' ? r.admin2 : r.admin1;
+    const label = [r.name, area && area !== r.name ? area : null, r.country].filter(Boolean).join(', ');
     if (seen.has(label)) continue;
     seen.add(label);
     out.push({ label, name: r.name, cc: r.country_code, lat: Math.round(r.latitude * 100) / 100, lon: Math.round(r.longitude * 100) / 100 });
@@ -167,7 +170,9 @@ async function nameFor(lat, lon) {
     if (!name) return null;
     let country = '';
     try { country = new Intl.DisplayNames(['en'], { type: 'region' }).of((a.country_code || '').toUpperCase()); } catch {}
-    return { name, cc: (a.country_code || '').toUpperCase() || undefined, label: [name, country].filter(Boolean).join(', ') };
+    const cc = (a.country_code || '').toUpperCase();
+    const area = (cc === 'PH' ? a.county : a.state || a.county)?.replace(/ Province$/, '');
+    return { name, cc: cc || undefined, label: [name, area && area !== name ? area : null, country].filter(Boolean).join(', ') };
   } catch { return null; }
 }
 
@@ -270,26 +275,6 @@ function renderPulse() {
   ));
   node.hidden = false;
 }
-
-/* ---------- theme ---------- */
-
-const THEME_KEY = 'headsup.theme';
-function currentTheme() {
-  try { const t = localStorage.getItem(THEME_KEY); if (t === 'dark' || t === 'light') return t; } catch {}
-  return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
-function applyTheme(t) {
-  document.documentElement.dataset.theme = t;
-  document.querySelector('meta[name="color-scheme"]')?.setAttribute('content', t);
-  const btn = document.getElementById('theme');
-  if (btn) { btn.setAttribute('aria-pressed', t === 'dark' ? 'true' : 'false'); btn.setAttribute('aria-label', t === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'); }
-}
-document.getElementById('theme').addEventListener('click', () => {
-  const next = currentTheme() === 'dark' ? 'light' : 'dark';
-  try { localStorage.setItem(THEME_KEY, next); } catch {}
-  applyTheme(next);
-});
-applyTheme(currentTheme());
 
 /* ---------- pieces ---------- */
 
