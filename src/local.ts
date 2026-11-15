@@ -22,7 +22,7 @@ export const LOCAL_FEEDS: LocalFeed[] = [
     // The main feed holds only the latest ten stories, so the City section and a second page are read too.
     urls: ['https://baguioheraldexpressonline.com/feed/', 'https://baguioheraldexpressonline.com/feed/?paged=2', 'https://baguioheraldexpressonline.com/category/city/feed/'],
     // This paper's feed carries no pictures, but its WordPress API gives each story's featured image.
-    wp: 'https://baguioheraldexpressonline.com/wp-json/wp/v2/posts?per_page=40&_embed=wp:featuredmedia&_fields=link,_embedded',
+    wp: 'https://baguioheraldexpressonline.com/wp-json/wp/v2/posts?per_page=40&_embed=wp:featuredmedia&_fields=link,_links,_embedded',
     places: ['baguio', 'benguet', 'la trinidad', 'itogon', 'tuba', 'sablan', 'tublay', 'bauang', 'la union', 'san fernando', 'cordillera'],
   },
 ];
