@@ -321,3 +321,21 @@ test('bearing points the right way and personalise includes it', () => {
   assert.equal(typeof a.bearing, 'number');
   assert.equal(personalise(normaliseUsgs(usgsFeed), null, 5).every((x) => x.bearing === null), true);
 });
+
+test('gdacs: an empty body counts as no events; one failing request does not hide the other', async () => {
+  const kv = new FakeKV();
+  let n = 0;
+  const stored = await refresh(kv, fakeFetch({ 'gdacs.org': () => { n++; return n === 1 ? new Response('') : Response.json(gdacsFeed); } }), NOW);
+  assert.equal(stored.sources.gdacs.ok, true);
+  assert.ok(stored.sources.gdacs.alerts.length >= 2);
+  const allDown = await refresh(new FakeKV(), fakeFetch({ 'gdacs.org': () => new Response('down', { status: 502 }) }), NOW);
+  assert.equal(allDown.sources.gdacs.ok, false);
+  assert.match(allDown.sources.gdacs.error, /502/);
+});
+
+test('gdacs: one request failing keeps the results of the other', async () => {
+  let n = 0;
+  const stored = await refresh(new FakeKV(), fakeFetch({ 'gdacs.org': () => { n++; return n === 1 ? new Response('down', { status: 502 }) : Response.json(gdacsFeed); } }), NOW);
+  assert.equal(stored.sources.gdacs.ok, true);
+  assert.ok(stored.sources.gdacs.alerts.length >= 2);
+});

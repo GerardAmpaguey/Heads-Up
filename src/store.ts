@@ -30,7 +30,8 @@ async function getText(doFetch: Fetch, url: string): Promise<string> {
 async function getJson(doFetch: Fetch, url: string): Promise<unknown> {
   const res = await doFetch(url, { headers: { accept: 'application/json', 'user-agent': UA }, signal: AbortSignal.timeout(12_000) });
   if (!res.ok) throw new Error(`${new URL(url).host} answered ${res.status}`);
-  return res.json();
+  const body = await res.text();
+  return body.trim() ? JSON.parse(body) : null; // an empty body means no events, not an error
 }
 
 /** Fetch every source. One source failing never wipes the other, and keeps its last good data. */
@@ -41,10 +42,12 @@ export async function refresh(kv: KV, doFetch: Fetch = fetch, now = new Date()):
   const jobs: Record<string, () => Promise<StoredItem[]>> = {
     usgs: async () => normaliseUsgs(await getJson(doFetch, USGS_URL)),
     gdacs: async () => {
-    const lists = await Promise.all(gdacsUrls(now).map(async (u) => normaliseGdacs(await getJson(doFetch, u))));
-    const byId = new Map(lists.flat().map((a) => [a.id, a]));
-    return [...byId.values()];
-  },
+      // Three requests (cyclones, and the orange/red others). One failing should not hide the rest.
+      const results = await Promise.allSettled(gdacsUrls(now).map(async (u) => normaliseGdacs(await getJson(doFetch, u))));
+      const ok = results.filter((r): r is PromiseFulfilledResult<Alert[]> => r.status === 'fulfilled');
+      if (ok.length === 0) throw (results[0] as PromiseRejectedResult).reason;
+      return [...new Map(ok.flatMap((r) => r.value).map((a) => [a.id, a])).values()];
+    },
     eol: async () => {
       const lists = await Promise.all(EOL_PRODUCTS.map(async (p) => normaliseEol(p, await getJson(doFetch, `https://endoflife.date/api/${p.product}.json`), now)));
       return lists.flat();
