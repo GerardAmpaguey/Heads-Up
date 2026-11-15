@@ -39,3 +39,13 @@ Static site on Cloudflare Workers (`wrangler.jsonc` serves `./site`). Connect th
 2. Severity scoring and a one-line "what to do" per alert
 3. Location from the request, so "Around you" is real
 4. Optional daily digest email
+
+## Live hazard feeds
+
+`/api/alerts` is served by a Cloudflare Worker (`src/worker.ts`). The "Around you" section uses it; web dev and AI are still demo data. If the API fails or is empty, the page falls back to the demo items.
+
+- **Sources:** USGS earthquakes (past week, M4.5+) and GDACS (tropical cyclones, plus orange/red floods, volcanoes and wildfires).
+- **Storage and refresh:** results are kept in the `ALERTS` KV namespace (wrangler provisions it on first deploy). A cron runs every 30 minutes, and a request also refreshes data older than 20 minutes. If one source fails, its previous data is kept.
+- **Location:** taken from Cloudflare's approximate request location, or `?lat=&lon=` to override. Events within 500 km are bumped one severity step (earthquakes only from M5). With a location, events within 1500 km and all urgent ones are shown. Without one, only heads-up and urgent.
+- **Credit and licensing:** USGS data is public domain (credit requested). GDACS values are automatic estimates, so each alert credits GDACS and links to its report. Publisher photos, when added, are hotlinked with credit and never copied.
+- **Tests:** `npm test` (Node 22+, uses fixtures and mocks, no network).

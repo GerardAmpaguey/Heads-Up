@@ -1,5 +1,7 @@
 import { ITEMS, CATEGORIES, SEVERITY, STACK } from './data.js';
 
+ITEMS.forEach((i) => { i.demo = true; });
+
 const main = document.getElementById('main');
 const sheet = document.getElementById('sheet');
 
@@ -19,6 +21,10 @@ function el(tag, attrs = {}, ...kids) {
     node.append(kid.nodeType ? kid : document.createTextNode(kid));
   }
   return node;
+}
+
+function metaLine(item) {
+  return [item.source, item.km != null ? `${item.km.toLocaleString('en')} km away` : null, ago(item.ago)].filter(Boolean).join(' · ');
 }
 
 function ago(minutes) {
@@ -56,6 +62,52 @@ const byNew = (a, b) => a.ago - b.ago;
 const sorted = (list) => [...list].sort(bySeverityThenNew);
 const watched = () => ITEMS.filter((i) => i.tags.some((t) => watch.has(t)));
 const catRoute = (id) => (id === 'hazard' ? '#/around' : `#/${id}`);
+
+
+/* ---------- live hazards ---------- */
+
+// Pulls /api/alerts. On success the demo hazard items are swapped for real ones; on any failure
+// the demo items stay, so the page always has something to show.
+async function loadLive() {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 2500);
+  try {
+    const res = await fetch('/api/alerts', { signal: ctl.signal, headers: { accept: 'application/json' } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data.items) || data.items.length === 0) return null;
+    const now = Date.now();
+    const live = data.items.map((a) => ({
+      id: a.id, category: 'hazard', severity: a.severity, title: a.title, summary: a.summary,
+      action: a.action, source: a.source, url: a.url, tags: a.tags || [],
+      ago: Math.max(0, Math.round((now - Date.parse(a.time)) / 60000)),
+      km: a.distanceKm == null ? null : Math.round(a.distanceKm),
+      demo: false,
+    }));
+    for (let i = ITEMS.length - 1; i >= 0; i--) if (ITEMS[i].category === 'hazard') ITEMS.splice(i, 1);
+    ITEMS.push(...live);
+    return data;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function showLocation(loc) {
+  if (!loc) return;
+  let name = loc.city || '';
+  if (loc.country) {
+    try { name = [loc.city, new Intl.DisplayNames(['en'], { type: 'region' }).of(loc.country)].filter(Boolean).join(', '); } catch {}
+  }
+  if (name) document.getElementById('where-label').textContent = name;
+  document.getElementById('where').title = 'Approximate, from your connection';
+}
+
+function showLiveBar() {
+  const bar = document.querySelector('.demo-bar');
+  if (bar) bar.replaceChildren(el('strong', {}, 'Around you is live.'), ' Web dev and AI are still demo data.');
+}
 
 /* ---------- pieces ---------- */
 
@@ -102,7 +154,7 @@ function story(item, withSummary) {
       el('span', { class: 'story__label' }, sevPill(item), el('span', {}, CATEGORIES[item.category].label)),
       el('span', { class: 'story__title' }, item.title),
       withSummary && el('span', { class: 'story__summary' }, item.summary),
-      el('span', { class: 'story__meta' }, `${item.source} · ${ago(item.ago)}`),
+      el('span', { class: 'story__meta' }, metaLine(item)),
     ),
   );
 }
@@ -115,7 +167,7 @@ function tile(item) {
       el('span', { class: 'tile__tag' }, sevPill(item)),
     ), item),
     el('span', { class: 'tile__title' }, item.title),
-    el('span', { class: 'tile__meta' }, `${item.source} · ${ago(item.ago)}`),
+    el('span', { class: 'tile__meta' }, metaLine(item)),
   );
 }
 
@@ -144,7 +196,7 @@ function openSheet(item) {
       el('button', { class: 'sheet__close', type: 'button', 'aria-label': 'Close', onclick: () => sheet.close() }, '×'),
     ), item),
     el('div', { class: 'sheet__body' },
-      el('p', { class: 'sheet__kicker' }, sevPill(item), el('span', {}, `${CATEGORIES[item.category].label} · ${item.source} · ${ago(item.ago)}`)),
+      el('p', { class: 'sheet__kicker' }, sevPill(item), el('span', {}, `${CATEGORIES[item.category].label} · ${metaLine(item)}`)),
       el('h2', { class: 'sheet__title', id: 'sheet-title' }, item.title),
       el('p', { class: 'sheet__summary' }, item.summary),
       el('div', { class: 'sheet__todo' },
@@ -156,7 +208,7 @@ function openSheet(item) {
         el('a', { class: 'btn btn--solid', href: item.url, target: '_blank', rel: 'noopener noreferrer' }, 'Open source ↗'),
         el('button', { class: 'btn btn--ghost', type: 'button', onclick: () => sheet.close() }, 'Close'),
       ),
-      el('p', { class: 'sheet__note' }, 'Demo item written to show the layout. It is not real news.'),
+      el('p', { class: 'sheet__note' }, item.demo ? 'Demo item written to show the layout. It is not real news.' : 'Automated data from the source above, and it may be delayed or revised. Check your official local agency before you act.'),
     ),
   );
   sheet.showModal();
@@ -338,4 +390,7 @@ document.getElementById('search').addEventListener('submit', (e) => {
 });
 
 lastPath = location.hash.split('?')[0];
-route();
+loadLive().then((data) => {
+  if (data) { showLocation(data.location); showLiveBar(); }
+  route();
+});

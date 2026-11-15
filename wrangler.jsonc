@@ -1,10 +1,21 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "heads-up",
+  "main": "src/worker.ts",
   "compatibility_date": "2026-11-01",
 
-  // For now the site is plain static files. A Worker for the live feeds comes later.
+  // The site is plain static files. Only /api/* runs the Worker first.
   "assets": {
-    "directory": "./site"
-  }
+    "directory": "./site",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+
+  // Where the latest alerts are kept. Wrangler creates this namespace on first deploy.
+  "kv_namespaces": [{ "binding": "ALERTS" }],
+
+  // Refresh the alerts every 30 minutes, even when nobody is visiting.
+  "triggers": { "crons": ["*/30 * * * *"] },
+
+  "observability": { "enabled": true }
 }
