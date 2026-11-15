@@ -25,10 +25,11 @@
         <p class="masthead__tag">What to prepare for, before it reaches you</p>
 
         <div class="masthead__tools">
-          <p class="where" id="where" title="Detected from your connection">
+          <button class="where" id="where" type="button" aria-haspopup="dialog" title="Change location">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
-            <span id="where-label">Philippines</span>
-          </p>
+            <span id="where-label">Set location</span>
+            <svg class="where__caret" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
           <form class="search" id="search" role="search">
             <label class="sr" for="q">Search alerts</label>
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
@@ -52,6 +53,7 @@
     </footer>
 
     <dialog class="sheet" id="sheet" aria-labelledby="sheet-title"></dialog>
+    <dialog class="sheet picker" id="picker" aria-labelledby="picker-title"></dialog>
 
     <script type="module" src="/js/app.js"></script>
   </body>

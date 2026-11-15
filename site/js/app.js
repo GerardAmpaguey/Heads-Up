@@ -4,6 +4,26 @@ import { CATEGORIES, SEVERITY, STACK } from './data.js';
 const ITEMS = [];
 const feed = { status: 'loading', data: null, retries: 0 };
 
+/* ---------- chosen location ---------- */
+
+const PLACE_KEY = 'headsup.place';
+let memoryPlace;
+
+// null means "use the location of my connection". Saved on this device only, never sent anywhere except
+// as coordinates to our own /api/alerts.
+function loadPlace() {
+  try {
+    const p = JSON.parse(localStorage.getItem(PLACE_KEY) || 'null');
+    if (p && Number.isFinite(p.lat) && Number.isFinite(p.lon) && typeof p.label === 'string') return p;
+  } catch {}
+  return memoryPlace ?? null;
+}
+function savePlace(p) {
+  memoryPlace = p;
+  try { p ? localStorage.setItem(PLACE_KEY, JSON.stringify(p)) : localStorage.removeItem(PLACE_KEY); } catch {}
+}
+let place = loadPlace();
+
 const main = document.getElementById('main');
 const sheet = document.getElementById('sheet');
 
@@ -87,7 +107,8 @@ function applyFeed(data) {
 
 async function loadFeed() {
   try {
-    const res = await fetch('/api/alerts', { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
+    const query = place ? `?lat=${place.lat}&lon=${place.lon}` : '';
+    const res = await fetch(`/api/alerts${query}`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
     if (!res.ok) throw new Error(`status ${res.status}`);
     const data = await res.json();
     applyFeed(data);
@@ -111,14 +132,105 @@ async function start() {
 }
 
 function showLocation(loc) {
-  if (!loc) return;
-  let name = loc.city || '';
-  if (loc.country) {
-    try { name = [loc.city, new Intl.DisplayNames(['en'], { type: 'region' }).of(loc.country)].filter(Boolean).join(', '); } catch {}
+  const label = document.getElementById('where-label');
+  const button = document.getElementById('where');
+  let name = '';
+  if (place) name = place.label;
+  else if (loc) {
+    name = loc.city || '';
+    if (loc.country) {
+      try { name = [loc.city, new Intl.DisplayNames(['en'], { type: 'region' }).of(loc.country)].filter(Boolean).join(', '); } catch {}
+    }
   }
-  if (name) document.getElementById('where-label').textContent = name;
-  document.getElementById('where').title = 'Approximate, from your connection';
+  label.textContent = name || 'Set location';
+  button.title = place ? 'Change location' : name ? 'Approximate, from your connection. Click to change.' : 'Choose where you are';
 }
+
+/* ---------- location picker ---------- */
+
+const picker = document.getElementById('picker');
+
+async function searchPlaces(text, signal) {
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(text)}&count=8&language=en&format=json`;
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new Error(`status ${res.status}`);
+  const data = await res.json();
+  const seen = new Set();
+  const out = [];
+  for (const r of data.results || []) {
+    if (!Number.isFinite(r.latitude) || !Number.isFinite(r.longitude)) continue;
+    const label = [r.name, r.admin1, r.country].filter(Boolean).join(', ');
+    if (seen.has(label)) continue;
+    seen.add(label);
+    out.push({ label, lat: Math.round(r.latitude * 100) / 100, lon: Math.round(r.longitude * 100) / 100 });
+  }
+  return out;
+}
+
+async function chooseLocation(next) {
+  place = next;
+  savePlace(next);
+  picker.close();
+  feed.status = ITEMS.length ? 'ready' : 'loading';
+  showLocation(feed.data?.location);
+  await loadFeed();
+  route();
+}
+
+function openPicker() {
+  const input = el('input', { class: 'picker__input', id: 'picker-input', type: 'search', placeholder: 'City or town, like Baguio', autocomplete: 'off', 'aria-label': 'Search for a city or town' });
+  const status = el('p', { class: 'picker__status', role: 'status' });
+  const list = el('ul', { class: 'picker__list' });
+  let timer;
+  let ctl;
+
+  const show = (places) => {
+    list.replaceChildren(...places.map((p) => el('li', {}, el('button', { class: 'picker__opt', type: 'button', onclick: () => chooseLocation(p) }, p.label))));
+  };
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    ctl?.abort();
+    const text = input.value.trim();
+    if (text.length < 2) { list.replaceChildren(); status.textContent = ''; return; }
+    timer = setTimeout(async () => {
+      ctl = new AbortController();
+      status.textContent = 'Searching…';
+      try {
+        const places = await searchPlaces(text, ctl.signal);
+        show(places);
+        status.textContent = places.length ? '' : 'No places match that name.';
+      } catch (err) {
+        if (err.name !== 'AbortError') { list.replaceChildren(); status.textContent = 'Place search is not available right now. Try again in a moment.'; }
+      }
+    }, 300);
+  });
+
+  const useDevice = el('button', { class: 'btn btn--ghost', type: 'button', onclick: () => {
+    if (!navigator.geolocation) { status.textContent = 'This browser cannot share your location.'; return; }
+    status.textContent = 'Waiting for your browser to share your location…';
+    navigator.geolocation.getCurrentPosition(
+      (pos) => chooseLocation({ label: 'My device location', lat: Math.round(pos.coords.latitude * 100) / 100, lon: Math.round(pos.coords.longitude * 100) / 100 }),
+      () => { status.textContent = 'Your browser did not share the location. Search for your town instead.'; },
+      { timeout: 10000, maximumAge: 600000 },
+    );
+  } }, 'Use my device location');
+  const useAuto = el('button', { class: 'btn btn--ghost', type: 'button', onclick: () => chooseLocation(null) }, 'Use my connection’s location');
+
+  picker.replaceChildren(
+    el('button', { class: 'sheet__close', type: 'button', 'aria-label': 'Close', onclick: () => picker.close() }, '×'),
+    el('div', { class: 'picker__body' },
+      el('h2', { class: 'picker__title', id: 'picker-title' }, 'Where are you?'),
+      el('p', { class: 'picker__hint' }, place ? `Showing hazards near ${place.label}.` : 'Hazards are ranked by distance from this place. It is saved only on this device.'),
+      input, status, list,
+      el('div', { class: 'picker__actions' }, useDevice, place && useAuto),
+      el('p', { class: 'picker__credit' }, 'Place search by ', el('a', { href: 'https://open-meteo.com/', target: '_blank', rel: 'noopener noreferrer' }, 'Open-Meteo'), ' (data from GeoNames).'),
+    ),
+  );
+  picker.showModal();
+  input.focus();
+}
+
+document.getElementById('where').addEventListener('click', openPicker);
 
 function showStatus(data) {
   const node = document.getElementById('status');

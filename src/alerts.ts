@@ -40,7 +40,7 @@ export type NewsItem = {
   imageCredit?: string;
 };
 
-export type Place = { lat: number; lon: number; country?: string; city?: string };
+export type Place = { lat: number; lon: number; country?: string; city?: string; chosen?: boolean };
 
 export type PersonalAlert = Alert & { distanceKm: number | null; bearing: number | null; near: boolean };
 

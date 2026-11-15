@@ -199,8 +199,12 @@ const withCf = (url, cf) => { const r = new Request(url); Object.defineProperty(
 
 test('placeFrom reads Cloudflare location, lets ?lat&lon override, and rejects nonsense', () => {
   const cf = { latitude: '14.6', longitude: '121.0', country: 'PH', city: 'Manila' };
-  assert.deepEqual(placeFrom(withCf('https://x.test/api/alerts', cf)), { lat: 14.6, lon: 121, country: 'PH', city: 'Manila' });
-  assert.equal(placeFrom(withCf('https://x.test/api/alerts?lat=35&lon=139', cf)).lat, 35);
+  assert.deepEqual(placeFrom(withCf('https://x.test/api/alerts', cf)), { lat: 14.6, lon: 121, country: 'PH', city: 'Manila', chosen: false });
+  const picked = placeFrom(withCf('https://x.test/api/alerts?lat=35&lon=139', cf));
+  assert.equal(picked.lat, 35);
+  assert.equal(picked.city, undefined, 'a chosen place drops the connection city');
+  assert.equal(picked.country, undefined);
+  assert.equal(picked.chosen, true);
   assert.equal(placeFrom(new Request('https://x.test/api/alerts')), null);
   assert.equal(placeFrom(new Request('https://x.test/api/alerts?lat=999&lon=1')), null);
   assert.equal(placeFrom(new Request('https://x.test/api/alerts?lat=abc&lon=1')), null);
@@ -338,4 +342,12 @@ test('gdacs: one request failing keeps the results of the other', async () => {
   const stored = await refresh(new FakeKV(), fakeFetch({ 'gdacs.org': () => { n++; return n === 1 ? new Response('down', { status: 502 }) : Response.json(gdacsFeed); } }), NOW);
   assert.equal(stored.sources.gdacs.ok, true);
   assert.ok(stored.sources.gdacs.alerts.length >= 2);
+});
+
+test('a chosen place is reported as exact and without the connection city', async () => {
+  const env = makeEnv();
+  await env.ALERTS.put(KEY, JSON.stringify({ updatedAt: new Date().toISOString(), sources: { usgs: { ok: true, updatedAt: new Date().toISOString(), alerts: [] } } }));
+  const res = await worker.fetch(withCf('https://x.test/api/alerts?lat=16.4&lon=120.6', { latitude: '35', longitude: '139', city: 'Tokyo', country: 'JP' }), env, ctx());
+  const body = await res.json();
+  assert.deepEqual(body.location, { country: null, city: null, approximate: false });
 });

@@ -20,14 +20,18 @@ const num = (v: unknown) => (typeof v === 'string' || typeof v === 'number') && 
 export function placeFrom(request: Request): Place | null {
   const url = new URL(request.url);
   const cf = (request as unknown as { cf?: Record<string, unknown> }).cf ?? {};
-  const lat = num(url.searchParams.get('lat')) ?? num(cf.latitude);
-  const lon = num(url.searchParams.get('lon')) ?? num(cf.longitude);
+  const qLat = num(url.searchParams.get('lat'));
+  const qLon = num(url.searchParams.get('lon'));
+  const chosen = qLat != null && qLon != null; // the visitor picked a place, so the connection's city no longer applies
+  const lat = chosen ? qLat : num(cf.latitude);
+  const lon = chosen ? qLon : num(cf.longitude);
   if (lat == null || lon == null || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
   return {
     lat,
     lon,
-    country: typeof cf.country === 'string' ? cf.country : undefined,
-    city: typeof cf.city === 'string' ? cf.city : undefined,
+    country: !chosen && typeof cf.country === 'string' ? cf.country : undefined,
+    city: !chosen && typeof cf.city === 'string' ? cf.city : undefined,
+    chosen,
   };
 }
 
@@ -51,7 +55,7 @@ async function alertsResponse(request: Request, env: Env, ctx: Ctx): Promise<Res
     {
       updatedAt: stored?.updatedAt ?? null,
       warming: !stored,
-      location: place ? { country: place.country ?? null, city: place.city ?? null, approximate: true } : null,
+      location: place ? { country: place.country ?? null, city: place.city ?? null, approximate: !place.chosen } : null,
       sources,
       items,
       news,
