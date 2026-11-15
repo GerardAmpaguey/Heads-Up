@@ -4,7 +4,7 @@ import worker, { placeFrom } from '../src/worker.ts';
 import { actionFor, bump, distanceKm, bearingDeg, personalise } from '../src/alerts.ts';
 import { normaliseUsgs, usgsSeverity } from '../src/usgs.ts';
 import { normaliseGdacs, gdacsUrls } from '../src/gdacs.ts';
-import { refresh, load, isStale, allAlerts, KEY } from '../src/hazards.ts';
+import { refresh, load, isStale, allItems, KEY } from '../src/store.ts';
 
 const NOW = new Date('2026-11-15T12:00:00Z');
 const hoursAgo = (h) => NOW.getTime() - h * 3_600_000;
@@ -34,6 +34,10 @@ const gdacsFeed = {
   ],
 };
 
+const wpRss = `<?xml version="1.0"?><rss version="2.0"><channel><title>WordPress News</title>
+<item><title>WordPress 6.9.1 Security Release</title><link>https://wordpress.org/news/2026/11/wordpress-6-9-1/</link><pubDate>${new Date(hoursAgo(6)).toUTCString()}</pubDate><description>This release fixes a security issue.</description></item>
+</channel></rss>`;
+
 class FakeKV {
   data = new Map();
   async get(key) { return this.data.has(key) ? JSON.parse(this.data.get(key)) : null; }
@@ -46,6 +50,8 @@ const fakeFetch = (overrides = {}) => async (url) => {
   if (hit) return hit[1]();
   if (u.includes('usgs.gov')) return Response.json(usgsFeed);
   if (u.includes('gdacs.org')) return Response.json(gdacsFeed);
+  if (u.includes('wordpress.org')) return new Response(wpRss);
+  if (u.includes('endoflife.date')) return Response.json(u.includes('php') ? [{ cycle: '8.2', eol: '2026-12-31' }, { cycle: '8.4', eol: '2028-12-31' }] : []);
   return new Response('nope', { status: 404 });
 };
 
@@ -151,8 +157,8 @@ test('refresh stores both sources and drops alerts older than a week', async () 
   const stored = await refresh(kv, fakeFetch({ 'usgs.gov': () => Response.json(old) }), NOW);
   assert.equal(stored.sources.usgs.ok, true);
   assert.equal(stored.sources.gdacs.ok, true);
-  assert.ok(!allAlerts(stored).some((a) => a.id === 'usgs:old'));
-  assert.equal(allAlerts(stored).length, 6);
+  assert.ok(!allItems(stored).some((a) => a.id === 'usgs:old'));
+  assert.equal(allItems(stored).length, 8);
   assert.deepEqual(await load(kv), JSON.parse(kv.data.get(KEY)));
 });
 
@@ -177,10 +183,10 @@ test('a network error is caught the same way', async () => {
   assert.equal(stored.sources.usgs.ok, true);
 });
 
-test('stale check uses 20 minutes', () => {
+test('stale check uses 45 minutes', () => {
   const stored = { updatedAt: NOW.toISOString(), sources: {} };
-  assert.equal(isStale(stored, new Date(NOW.getTime() + 19 * 60_000)), false);
-  assert.equal(isStale(stored, new Date(NOW.getTime() + 21 * 60_000)), true);
+  assert.equal(isStale(stored, new Date(NOW.getTime() + 44 * 60_000)), false);
+  assert.equal(isStale(stored, new Date(NOW.getTime() + 46 * 60_000)), true);
 });
 
 // ---------- the Worker ----------
@@ -200,21 +206,34 @@ test('placeFrom reads Cloudflare location, lets ?lat&lon override, and rejects n
   assert.equal(placeFrom(new Request('https://x.test/api/alerts?lat=abc&lon=1')), null);
 });
 
-test('first visit waits for the first fetch and returns personalised alerts', async () => {
+test('first visit answers at once with warming:true while the first fetch runs in the background', async () => {
   const realFetch = globalThis.fetch;
   globalThis.fetch = fakeFetch();
   try {
     const env = makeEnv();
-    const res = await worker.fetch(withCf('https://x.test/api/alerts', { latitude: '14.6', longitude: '121', country: 'PH', city: 'Manila' }), env, ctx());
+    const c = ctx();
+    const res = await worker.fetch(withCf('https://x.test/api/alerts', { latitude: '14.6', longitude: '121', country: 'PH', city: 'Manila' }), env, c);
     assert.equal(res.status, 200);
-    assert.equal(res.headers.get('cache-control'), 'private, max-age=60');
-    const body = await res.json();
+    assert.equal(res.headers.get('cache-control'), 'no-store');
+    const first = await res.json();
+    assert.equal(first.warming, true);
+    assert.deepEqual(first.items, []);
+    assert.deepEqual(first.news, []);
+    await Promise.all(c.jobs);
+    const res2 = await worker.fetch(withCf('https://x.test/api/alerts', { latitude: '14.6', longitude: '121', country: 'PH', city: 'Manila' }), env, ctx());
+    assert.equal(res2.headers.get('cache-control'), 'private, max-age=60');
+    const body = await res2.json();
+    assert.equal(body.warming, false);
     assert.equal(body.location.city, 'Manila');
     assert.equal(body.location.approximate, true);
-    assert.equal(body.items[0].id.startsWith('gdacs:TC:1001'), true);
+    assert.equal(body.items[0].id, 'gdacs:TC:1001');
     assert.equal(body.sources.usgs.ok, true);
     assert.ok(!('alerts' in body.sources.usgs), 'raw alerts must not leak into the response');
-    assert.ok(env.ALERTS.data.has(KEY));
+    assert.equal(body.sources['wp-news'].ok, true);
+    assert.equal(body.sources.openai.ok, false);
+    assert.match(body.sources.openai.error, /404/);
+    assert.ok(body.news.length >= 1 && body.news.every((n) => n.category !== 'hazard'));
+    assert.ok(body.news.every((n, i, all) => i === 0 || Date.parse(all[i - 1].time) >= Date.parse(n.time)), 'news is newest first');
   } finally { globalThis.fetch = realFetch; }
 });
 
@@ -224,13 +243,17 @@ test('a fresh store is served without fetching; a stale one refreshes in the bac
   globalThis.fetch = async (...a) => { calls++; return fakeFetch()(...a); };
   try {
     const env = makeEnv();
-    await worker.fetch(new Request('https://x.test/api/alerts'), env, ctx());
+    const c0 = ctx();
+    await worker.fetch(new Request('https://x.test/api/alerts'), env, c0);
+    await Promise.all(c0.jobs);
     const first = calls;
-    assert.ok(first >= 3);
-    await worker.fetch(new Request('https://x.test/api/alerts'), env, ctx());
-    assert.equal(calls, first, 'fresh data should not trigger another fetch');
+    assert.ok(first >= 10);
+    const c1 = ctx();
+    await worker.fetch(new Request('https://x.test/api/alerts'), env, c1);
+    assert.equal(c1.jobs.length, 0, 'fresh data schedules nothing');
+    assert.equal(calls, first);
     const stale = JSON.parse(env.ALERTS.data.get(KEY));
-    stale.updatedAt = new Date(Date.now() - 25 * 60_000).toISOString();
+    stale.updatedAt = new Date(Date.now() - 50 * 60_000).toISOString();
     env.ALERTS.data.set(KEY, JSON.stringify(stale));
     const c = ctx();
     const res = await worker.fetch(new Request('https://x.test/api/alerts'), env, c);
@@ -253,14 +276,18 @@ test('cron handler refreshes the store', async () => {
   } finally { globalThis.fetch = realFetch; }
 });
 
-test('both sources down on a cold start still answers with an empty list, not a crash', async () => {
+test('every source down on a cold start still answers with an empty list, not a crash', async () => {
   const realFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response('down', { status: 500 });
   try {
-    const res = await worker.fetch(new Request('https://x.test/api/alerts'), makeEnv(), ctx());
+    const env = makeEnv();
+    const c = ctx();
+    const res = await worker.fetch(new Request('https://x.test/api/alerts'), env, c);
     assert.equal(res.status, 200);
-    const body = await res.json();
+    await Promise.all(c.jobs);
+    const body = await (await worker.fetch(new Request('https://x.test/api/alerts'), env, ctx())).json();
     assert.deepEqual(body.items, []);
+    assert.deepEqual(body.news, []);
     assert.equal(body.sources.usgs.ok, false);
   } finally { globalThis.fetch = realFetch; }
 });

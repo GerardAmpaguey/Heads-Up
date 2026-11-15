@@ -24,6 +24,22 @@ export type Alert = {
   tags: string[];
 };
 
+/** A web dev or AI news item. Same fields as a hazard alert where they overlap, but no location. */
+export type NewsItem = {
+  id: string;
+  category: 'webdev' | 'ai';
+  severity: Severity;
+  title: string;
+  summary: string;
+  action: string;
+  source: string;
+  url: string;
+  time: string; // ISO 8601, UTC
+  tags: string[];
+  image?: string;
+  imageCredit?: string;
+};
+
 export type Place = { lat: number; lon: number; country?: string; city?: string };
 
 export type PersonalAlert = Alert & { distanceKm: number | null; bearing: number | null; near: boolean };

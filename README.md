@@ -40,12 +40,14 @@ Static site on Cloudflare Workers (`wrangler.jsonc` serves `./site`). Connect th
 3. Location from the request, so "Around you" is real
 4. Optional daily digest email
 
-## Live hazard feeds
+## How it works
 
-`/api/alerts` is served by a Cloudflare Worker (`src/worker.ts`). The "Around you" section uses it; web dev and AI are still demo data. If the API fails or is empty, the page falls back to the demo items.
+Everything on the page comes from `/api/alerts`, served by a Cloudflare Worker (`src/worker.ts`). Nothing is made up.
 
-- **Sources:** USGS earthquakes (past week, M4.5+) and GDACS (tropical cyclones, plus orange/red floods, volcanoes and wildfires).
-- **Storage and refresh:** results are kept in the `ALERTS` KV namespace (wrangler provisions it on first deploy). A cron runs every 30 minutes, and a request also refreshes data older than 20 minutes. If one source fails, its previous data is kept.
-- **Location:** taken from Cloudflare's approximate request location, or `?lat=&lon=` to override. Events within 500 km are bumped one severity step (earthquakes only from M5). With a location, events within 1500 km and all urgent ones are shown. Without one, only heads-up and urgent.
-- **Credit and licensing:** USGS data is public domain (credit requested). GDACS values are automatic estimates, so each alert credits GDACS and links to its report. Publisher photos, when added, are hotlinked with credit and never copied.
+- **Hazards (Around you):** USGS earthquakes (past week, M4.5+) and GDACS (tropical cyclones, plus orange and red floods, volcanoes and wildfires). Alerts are ranked by distance from the visitor's approximate location (Cloudflare's request location, or `?lat=&lon=` to override). Events within 500 km are bumped one severity step (earthquakes only from M5). With a location, events within 1,500 km and all urgent ones are shown; without one, only heads-up and urgent.
+- **Web dev and AI:** RSS and Atom feeds listed in `src/news.ts` (WordPress News, Wordfence, Sucuri, Astro, Next.js, Tailwind CSS and Wrangler releases, Elementor, Figma, OpenAI, Google DeepMind, Hugging Face) plus PHP and Node.js end-of-life dates from endoflife.date. Add or remove a feed by editing the `FEEDS` list.
+- **Severity (web dev and AI):** plain keyword rules in `rate()`. Exploited or critical security problems in web dev are urgent; security fixes, deprecations, end-of-life and new major versions are heads-up; everything else is FYI. AI news is never urgent.
+- **Storage and refresh:** results are kept in the `ALERTS` KV namespace. A cron runs every 30 minutes. A visit only triggers a refresh on the very first run or if the cron has fallen behind (over 45 minutes). If one source fails, its previous data is kept, and `/api/alerts` lists which sources are healthy.
+- **Photos:** each news item uses the picture its publisher attached to the post, hotlinked and credited, never copied. GitHub release feeds have none (their thumbnails are avatars). Cyclone alerts use GDACS's overview map. Other hazards draw a locator graphic from distance and bearing.
+- **Credit and licensing:** USGS data is public domain (credit requested). GDACS values are automatic estimates, so each alert credits GDACS and links to its report. News items show a short summary and link to the original.
 - **Tests:** `npm test` (Node 22+, uses fixtures and mocks, no network).

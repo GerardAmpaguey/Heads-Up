@@ -1,6 +1,8 @@
-import { ITEMS, CATEGORIES, SEVERITY, STACK } from './data.js';
+import { CATEGORIES, SEVERITY, STACK } from './data.js';
 
-ITEMS.forEach((i) => { i.demo = true; });
+// Everything on the page comes from /api/alerts. Nothing is made up.
+const ITEMS = [];
+const feed = { status: 'loading', data: null, retries: 0 };
 
 const main = document.getElementById('main');
 const sheet = document.getElementById('sheet');
@@ -64,34 +66,47 @@ const watched = () => ITEMS.filter((i) => i.tags.some((t) => watch.has(t)));
 const catRoute = (id) => (id === 'hazard' ? '#/around' : `#/${id}`);
 
 
-/* ---------- live hazards ---------- */
+/* ---------- live data ---------- */
 
-// Pulls /api/alerts. On success the demo hazard items are swapped for real ones; on any failure
-// the demo items stay, so the page always has something to show.
-async function loadLive() {
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 2500);
+function applyFeed(data) {
+  const now = Date.now();
+  const minutes = (t) => Math.max(0, Math.round((now - Date.parse(t)) / 60000));
+  const common = (a) => ({
+    id: a.id, category: a.category || 'hazard', severity: a.severity, title: a.title, summary: a.summary,
+    action: a.action, source: a.source, url: a.url, tags: a.tags || [], ago: minutes(a.time),
+    image: a.image, imageCredit: a.imageCredit,
+  });
+  const hazards = (data.items || []).map((a) => ({
+    ...common(a), category: 'hazard',
+    km: a.distanceKm == null ? null : Math.round(a.distanceKm), bearing: a.bearing ?? null,
+  }));
+  const news = (data.news || []).map((a) => ({ ...common(a), km: null, bearing: null }));
+  ITEMS.length = 0;
+  ITEMS.push(...hazards, ...news);
+}
+
+async function loadFeed() {
   try {
-    const res = await fetch('/api/alerts', { signal: ctl.signal, headers: { accept: 'application/json' } });
-    if (!res.ok) return null;
+    const res = await fetch('/api/alerts', { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
+    if (!res.ok) throw new Error(`status ${res.status}`);
     const data = await res.json();
-    if (!Array.isArray(data.items) || data.items.length === 0) return null;
-    const now = Date.now();
-    const live = data.items.map((a) => ({
-      id: a.id, category: 'hazard', severity: a.severity, title: a.title, summary: a.summary,
-      action: a.action, source: a.source, url: a.url, tags: a.tags || [], image: a.image, imageCredit: a.imageCredit,
-      ago: Math.max(0, Math.round((now - Date.parse(a.time)) / 60000)),
-      km: a.distanceKm == null ? null : Math.round(a.distanceKm),
-      bearing: a.bearing ?? null,
-      demo: false,
-    }));
-    for (let i = ITEMS.length - 1; i >= 0; i--) if (ITEMS[i].category === 'hazard') ITEMS.splice(i, 1);
-    ITEMS.push(...live);
-    return data;
+    applyFeed(data);
+    feed.data = data;
+    feed.status = 'ready';
+    showLocation(data.location);
+    showStatus(data);
   } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
+    if (!feed.data) feed.status = 'error';
+  }
+}
+
+async function start() {
+  await loadFeed();
+  route();
+  // The very first visit after a deploy can arrive before the first fetch has finished. Ask again shortly.
+  if (feed.data?.warming && feed.retries < 6) {
+    feed.retries += 1;
+    setTimeout(start, 8000);
   }
 }
 
@@ -105,9 +120,13 @@ function showLocation(loc) {
   document.getElementById('where').title = 'Approximate, from your connection';
 }
 
-function showLiveBar() {
-  const bar = document.querySelector('.demo-bar');
-  if (bar) bar.replaceChildren(el('strong', {}, 'Around you is live.'), ' Web dev and AI are still demo data.');
+function showStatus(data) {
+  const node = document.getElementById('status');
+  if (!node || !data.updatedAt) return;
+  const sources = Object.values(data.sources || {});
+  const down = sources.filter((s) => !s.ok).length;
+  const mins = Math.max(0, Math.round((Date.now() - Date.parse(data.updatedAt)) / 60000));
+  node.textContent = `Updated ${ago(mins)}. ${down === 0 ? `All ${sources.length} sources reachable.` : `${down} of ${sources.length} sources are unavailable right now.`}`;
 }
 
 /* ---------- pieces ---------- */
@@ -244,12 +263,10 @@ function openSheet(item) {
       ),
       item.tags.length > 0 && el('p', { class: 'sheet__tags' }, item.tags.map((t) => el('span', { class: 'tag' }, t))),
       el('div', { class: 'sheet__actions' },
-        item.demo
-          ? el('span', { class: 'btn btn--ghost', 'aria-disabled': 'true' }, 'Demo item, no article')
-          : el('a', { class: 'btn btn--solid', href: item.url, target: '_blank', rel: 'noopener noreferrer' }, 'Open source ↗'),
+        el('a', { class: 'btn btn--solid', href: item.url, target: '_blank', rel: 'noopener noreferrer' }, 'Open source ↗'),
         el('button', { class: 'btn btn--ghost', type: 'button', onclick: () => sheet.close() }, 'Close'),
       ),
-      el('p', { class: 'sheet__note' }, item.demo ? 'Demo item written to show the layout. It is not real news.' : 'Automated data from the source above, and it may be delayed or revised. Check your official local agency before you act.'),
+      el('p', { class: 'sheet__note' }, item.category === 'hazard' ? 'Automated data from the source above. It may be delayed or revised, so check your official local agency before you act.' : 'Summary of the source above. Read the original before you act on it.'),
     ),
   );
   sheet.showModal();
@@ -293,11 +310,56 @@ function watchPanel() {
   );
 }
 
+function stateBlock() {
+  if (feed.status === 'loading') return [el('p', { class: 'empty empty--state', role: 'status' }, 'Loading the latest alerts…')];
+  if (feed.status === 'error') {
+    return [el('div', { class: 'empty empty--state' },
+      el('p', {}, 'We could not load alerts just now. Check your connection and try again.'),
+      el('button', { class: 'btn btn--solid', type: 'button', onclick: () => { feed.status = 'loading'; route(); start(); } }, 'Try again'),
+    )];
+  }
+  if (feed.data?.warming) return [el('p', { class: 'empty empty--state', role: 'status' }, 'Gathering the first alerts. This takes about a minute on the first visit.')];
+  return null;
+}
+
+const LATEST_COUNT = 5;
+let latestFilter = 'all';
+
+/* Latest on the front page: five items, with a severity tab to narrow them. */
+function latestBlock() {
+  const list = el('ul', { class: 'list' });
+  const more = el('a', { class: 'sec-more', href: '#/latest' }, 'View more +');
+  const tabs = el('div', { class: 'chips chips--tabs', role: 'group', 'aria-label': 'Show latest by severity' });
+  const options = [['all', 'All'], ...Object.entries(SEVERITY).map(([k, v]) => [k, v.label])];
+  const fill = () => {
+    const rows = ITEMS.filter((i) => latestFilter === 'all' || i.severity === latestFilter).sort(byNew).slice(0, LATEST_COUNT);
+    list.replaceChildren(...(rows.length ? rows.map((i) => el('li', {}, story(i, true))) : [el('li', { class: 'empty' }, 'Nothing in this group right now.')]));
+    more.setAttribute('href', latestFilter === 'all' ? '#/latest' : `#/latest?s=${latestFilter}`);
+    for (const b of tabs.children) b.setAttribute('aria-pressed', b.dataset.k === latestFilter ? 'true' : 'false');
+  };
+  for (const [k, label] of options) {
+    const n = k === 'all' ? ITEMS.length : ITEMS.filter((i) => i.severity === k).length;
+    tabs.append(el('button', { class: 'chip chip--tab', type: 'button', 'data-k': k, onclick: () => { latestFilter = k; fill(); } }, `${label} `, el('span', { class: 'chip__n' }, String(n))));
+  }
+  fill();
+  return el('section', { class: 'cols__main', 'aria-labelledby': 'latest-title' },
+    el('header', { class: 'sec-head' }, el('h2', { class: 'sec-title', id: 'latest-title' }, 'Latest'), more),
+    tabs,
+    list,
+  );
+}
+
+const EMPTY = {
+  hazard: 'No active hazards near you right now. We check every 30 minutes.',
+  webdev: 'No web dev news in the last two weeks.',
+  ai: 'No AI news in the last two weeks.',
+};
+
 function homeView() {
   const ranked = sorted(ITEMS);
   const top = ranked[0];
+  if (!top) return [el('p', { class: 'empty empty--state' }, 'No alerts right now. We check again every 30 minutes.')];
   const side = ranked.slice(1, 5);
-  const latest = [...ITEMS].sort(byNew).slice(0, 7);
   const urgent = ranked.filter((i) => i.severity === 'urgent');
 
   const out = [
@@ -307,13 +369,7 @@ function homeView() {
     ),
 
     el('div', { class: 'cols' },
-      el('section', { class: 'cols__main', 'aria-labelledby': 'latest-title' },
-        el('header', { class: 'sec-head' },
-          el('h2', { class: 'sec-title', id: 'latest-title' }, 'Latest'),
-          el('a', { class: 'sec-more', href: '#/latest' }, 'View more +'),
-        ),
-        el('ul', { class: 'list' }, latest.map((i) => el('li', {}, story(i, true)))),
-      ),
+      latestBlock(),
       el('aside', { class: 'cols__side', 'aria-label': 'Sidebar' },
         panel(`Urgent now (${urgent.length})`,
           urgent.length
@@ -332,7 +388,7 @@ function homeView() {
   for (const [id, meta] of Object.entries(CATEGORIES)) {
     out.push(el('section', { class: 'block', 'aria-label': meta.label },
       sectionHead(meta.label, catRoute(id)),
-      tileGrid(sorted(ITEMS.filter((i) => i.category === id)).slice(0, 4), 'Nothing here right now.'),
+      tileGrid(sorted(ITEMS.filter((i) => i.category === id)).slice(0, 4), EMPTY[id]),
     ));
   }
   return out;
@@ -354,15 +410,23 @@ function categoryView(id, filter) {
         chips.map(([k, label, n]) => el('a', { class: 'chip', href: k === 'all' ? base : `${base}?s=${k}`, 'aria-current': k === filter ? 'true' : false }, `${label} `, el('span', { class: 'chip__n' }, String(n)))),
       ),
     ),
-    tileGrid(shown, 'Nothing here right now.'),
+    tileGrid(shown, all.length ? 'Nothing in this group right now.' : EMPTY[id]),
   ];
 }
 
-function latestView() {
-  const items = [...ITEMS].sort(byNew);
+function latestView(filter) {
+  const all = [...ITEMS].sort(byNew);
+  const shown = (filter === 'all' ? all : all.filter((i) => i.severity === filter)).slice(0, 60);
+  const chips = [['all', 'All', all.length], ...Object.entries(SEVERITY).map(([k, v]) => [k, v.label, all.filter((i) => i.severity === k).length])];
   return [
-    pageHead('Latest', 'Everything, newest first.'),
-    el('ul', { class: 'list list--page' }, items.map((i) => el('li', {}, story(i, true)))),
+    pageHead('Latest', 'Everything, newest first.',
+      el('div', { class: 'chips', role: 'group', 'aria-label': 'Filter by severity' },
+        chips.map(([k, label, n]) => el('a', { class: 'chip', href: k === 'all' ? '#/latest' : `#/latest?s=${k}`, 'aria-current': k === filter ? 'true' : false }, `${label} `, el('span', { class: 'chip__n' }, String(n)))),
+      ),
+    ),
+    shown.length
+      ? el('ul', { class: 'list list--page' }, shown.map((i) => el('li', {}, story(i, true))))
+      : el('p', { class: 'empty' }, 'Nothing in this group right now.'),
   ];
 }
 
@@ -406,10 +470,11 @@ function route() {
   if (path === 'around') { active = 'hazard'; view = categoryView('hazard', params.get('s') || 'all'); }
   else if (path === 'webdev') { active = 'webdev'; view = categoryView('webdev', params.get('s') || 'all'); }
   else if (path === 'ai') { active = 'ai'; view = categoryView('ai', params.get('s') || 'all'); }
-  else if (path === 'latest') { active = 'latest'; view = latestView(); }
+  else if (path === 'latest') { active = 'latest'; view = latestView(params.get('s') || 'all'); }
   else if (path === 'watchlist') { active = 'watchlist'; view = watchlistView(); }
   else if (path === 'search') { active = ''; view = searchView(params.get('q') || ''); }
   else view = homeView();
+  if (feed.status !== 'ready' || feed.data?.warming) view = stateBlock() || view;
 
   if (path !== 'search') document.getElementById('q').value = '';
   renderNav(active);
@@ -431,7 +496,5 @@ document.getElementById('search').addEventListener('submit', (e) => {
 });
 
 lastPath = location.hash.split('?')[0];
-loadLive().then((data) => {
-  if (data) { showLocation(data.location); showLiveBar(); }
-  route();
-});
+route();
+start();

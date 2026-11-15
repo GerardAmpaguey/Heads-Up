@@ -83,7 +83,6 @@ main:focus, main:focus-visible { outline: none; }
   border-radius: 999px; background: #ffd48a; color: #4a2700; font-size: 0.75rem; font-weight: 700;
 }
 
-.demo-bar { padding: 0.45rem var(--gutter); background: #fff3d6; border-bottom: 1px solid #f0d28f; color: #5c3a00; font-size: 0.88rem; text-align: center; }
 
 @media (min-width: 640px) { .where { display: inline-flex; } }
 @media (min-width: 900px) {
@@ -299,3 +298,9 @@ main:focus, main:focus-visible { outline: none; }
 .sheet__banner > .sheet__close { z-index: 3; }
 
 .tile__art--locator { width: 66%; }
+
+.chips--tabs { margin: 0.9rem 0 1.1rem; }
+.chip--tab[aria-pressed='true']::before { content: none; }
+.chip--tab[aria-pressed='true'] .chip__n { color: #c3cdee; }
+.empty--state { padding: 3rem 0; text-align: center; display: grid; gap: 1rem; justify-items: center; }
+.foot__status { margin-top: 0.6rem; font-size: 0.85rem; opacity: 0.75; }

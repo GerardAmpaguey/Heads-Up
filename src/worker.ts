@@ -1,5 +1,5 @@
-import { personalise, type Place } from './alerts.ts';
-import { allAlerts, isStale, load, refresh, type KV, type Stored } from './hazards.ts';
+import { personalise, type Alert, type NewsItem, type Place } from './alerts.ts';
+import { allItems, isStale, load, refresh, type KV } from './store.ts';
 
 type Env = {
   ALERTS: KV;
@@ -31,23 +31,33 @@ export function placeFrom(request: Request): Place | null {
   };
 }
 
-async function alertsResponse(request: Request, env: Env, ctx: Ctx): Promise<Response> {
-  let stored: Stored | null = await load(env.ALERTS);
-  if (!stored) stored = await refresh(env.ALERTS); // very first visit: wait for the first fetch
-  else if (isStale(stored)) ctx.waitUntil(refresh(env.ALERTS));
+const NEWS_LIMIT = 80;
 
+async function alertsResponse(request: Request, env: Env, ctx: Ctx): Promise<Response> {
+  const stored = await load(env.ALERTS);
+  // Fetching a dozen feeds is too much work for one visitor's request. The cron keeps the store fresh;
+  // a visit only steps in on the very first run, or when the cron has fallen behind.
+  if (!stored || isStale(stored)) ctx.waitUntil(refresh(env.ALERTS).then(() => undefined, () => undefined));
+
+  const everything = stored ? allItems(stored) : [];
   const place = placeFrom(request);
-  const items = personalise(allAlerts(stored), place);
-  const sources = Object.fromEntries(Object.entries(stored.sources).map(([k, v]) => [k, { ok: v.ok, updatedAt: v.updatedAt }]));
+  const items = personalise(everything.filter((i): i is Alert => i.category === 'hazard'), place);
+  const news = everything
+    .filter((i): i is NewsItem => i.category !== 'hazard')
+    .sort((a, b) => Date.parse(b.time) - Date.parse(a.time))
+    .slice(0, NEWS_LIMIT);
+  const sources = Object.fromEntries(Object.entries(stored?.sources ?? {}).map(([k, v]) => [k, { ok: v.ok, updatedAt: v.updatedAt, ...(v.ok ? {} : { error: v.error }) }]));
   return json(
     {
-      updatedAt: stored.updatedAt,
+      updatedAt: stored?.updatedAt ?? null,
+      warming: !stored,
       location: place ? { country: place.country ?? null, city: place.city ?? null, approximate: true } : null,
       sources,
       items,
+      news,
     },
     200,
-    { 'cache-control': 'private, max-age=60' },
+    { 'cache-control': stored ? 'private, max-age=60' : 'no-store' },
   );
 }
 

@@ -1,4 +1,5 @@
-import type { Alert } from './alerts.ts';
+import type { Alert, NewsItem } from './alerts.ts';
+import { EOL_PRODUCTS, FEEDS, normaliseEol, normaliseFeed } from './news.ts';
 import { normaliseGdacs, gdacsUrls } from './gdacs.ts';
 import { normaliseUsgs, USGS_URL } from './usgs.ts';
 
@@ -7,15 +8,24 @@ export type KV = {
   put(key: string, value: string): Promise<void>;
 };
 
-export type SourceState = { ok: boolean; updatedAt: string; error?: string; alerts: Alert[] };
+export type StoredItem = Alert | NewsItem;
+
+export type SourceState = { ok: boolean; updatedAt: string; error?: string; alerts: StoredItem[] };
 export type Stored = { updatedAt: string; sources: Record<string, SourceState> };
 
-export const KEY = 'hazards:v1';
-export const STALE_MS = 20 * 60_000; // refresh when older than this
-const KEEP_MS = 7 * 86_400_000; // forget alerts older than a week
+export const KEY = 'alerts:v2';
+export const STALE_MS = 45 * 60_000; // the cron runs every 30 minutes; a visit refreshes only if that has been missed
+const KEEP_HAZARD_MS = 7 * 86_400_000; // forget hazard alerts older than a week
+const KEEP_NEWS_MS = 14 * 86_400_000; // and news older than two weeks
 const UA = 'Heads-Up/0.1 (+https://heads-up.ampagueyg.workers.dev)';
 
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
+
+async function getText(doFetch: Fetch, url: string): Promise<string> {
+  const res = await doFetch(url, { headers: { accept: 'application/atom+xml, application/rss+xml, application/xml, text/xml, */*', 'user-agent': UA }, signal: AbortSignal.timeout(12_000) });
+  if (!res.ok) throw new Error(`${new URL(url).host} answered ${res.status}`);
+  return res.text();
+}
 
 async function getJson(doFetch: Fetch, url: string): Promise<unknown> {
   const res = await doFetch(url, { headers: { accept: 'application/json', 'user-agent': UA }, signal: AbortSignal.timeout(12_000) });
@@ -28,20 +38,25 @@ export async function refresh(kv: KV, doFetch: Fetch = fetch, now = new Date()):
   const previous = await load(kv);
   const stamp = now.toISOString();
 
-  const jobs: Record<string, () => Promise<Alert[]>> = {
+  const jobs: Record<string, () => Promise<StoredItem[]>> = {
     usgs: async () => normaliseUsgs(await getJson(doFetch, USGS_URL)),
     gdacs: async () => {
     const lists = await Promise.all(gdacsUrls(now).map(async (u) => normaliseGdacs(await getJson(doFetch, u))));
     const byId = new Map(lists.flat().map((a) => [a.id, a]));
     return [...byId.values()];
   },
+    eol: async () => {
+      const lists = await Promise.all(EOL_PRODUCTS.map(async (p) => normaliseEol(p, await getJson(doFetch, `https://endoflife.date/api/${p.product}.json`), now)));
+      return lists.flat();
+    },
   };
+  for (const def of FEEDS) jobs[def.id] = async () => normaliseFeed(def, await getText(doFetch, def.url));
 
   const sources: Record<string, SourceState> = {};
   await Promise.all(
     Object.entries(jobs).map(async ([name, run]) => {
       try {
-        const alerts = (await run()).filter((a) => now.getTime() - Date.parse(a.time) < KEEP_MS);
+        const alerts = (await run()).filter((a) => now.getTime() - Date.parse(a.time) < (a.category === 'hazard' ? KEEP_HAZARD_MS : KEEP_NEWS_MS));
         sources[name] = { ok: true, updatedAt: stamp, alerts };
       } catch (err) {
         const old = previous?.sources[name];
@@ -61,4 +76,4 @@ export async function load(kv: KV): Promise<Stored | null> {
 }
 
 export const isStale = (stored: Stored, now = new Date()) => now.getTime() - Date.parse(stored.updatedAt) > STALE_MS;
-export const allAlerts = (stored: Stored): Alert[] => Object.values(stored.sources).flatMap((s) => s.alerts);
+export const allItems = (stored: Stored): StoredItem[] => Object.values(stored.sources).flatMap((s) => s.alerts);
