@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import worker, { localPlaceFrom } from '../src/worker.ts';
+import worker, { localPlaceFrom, pickNews } from '../src/worker.ts';
 import { bingUrl, countryCode, normaliseLocal, placeName, rateLocal, realLink, searchUrl } from '../src/local.ts';
 
 const NOW = new Date('2026-11-15T12:00:00Z');
@@ -119,4 +119,14 @@ test('sports headlines that borrow weather words are dropped', () => {
   const xml = `<rss><channel>${item('Storm of goals as Baguio FC beat rivals in league opener', 'Sun', 2, 'z')}${item('NBA: Fire up the playoffs in Miami', 'ESPN', 2, 'y')}${item('Fire hits Baguio market', 'Rappler', 2, 'x')}</channel></rss>`;
   const items = normaliseLocal(xml, { name: 'Baguio' }, NOW);
   assert.deepEqual(items.map((i) => i.title), ['Fire hits Baguio market']);
+});
+
+test('pickNews keeps each quiet source\'s latest items even when busy feeds fill the limit', () => {
+  const mk = (source, i, hoursAgo) => ({ id: `${source}${i}`, source, time: new Date(NOW.getTime() - hoursAgo * 3_600_000).toISOString() });
+  const busy = Array.from({ length: 20 }, (_, i) => mk('Busy', i, i + 1));
+  const quiet = [mk('Quiet', 0, 500), mk('Quiet', 1, 600), mk('Quiet', 2, 700), mk('Quiet', 3, 800)];
+  const out = pickNews([...busy, ...quiet], 10);
+  assert.equal(out.length, 10);
+  assert.equal(out.filter((n) => n.source === 'Quiet').length, 3);
+  assert.ok(out.every((n, i, a) => i === 0 || Date.parse(a[i - 1].time) >= Date.parse(n.time)));
 });

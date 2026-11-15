@@ -36,7 +36,22 @@ export function placeFrom(request: Request): Place | null {
   };
 }
 
-const NEWS_LIMIT = 200;
+const NEWS_LIMIT = 300;
+const PER_SOURCE_MIN = 3;
+
+/** Newest first, but every source keeps its latest few so a busy feed cannot push a quiet one (say, Astro) off the page. */
+export function pickNews(all: NewsItem[], limit = NEWS_LIMIT): NewsItem[] {
+  const newest = [...all].sort((a, b) => Date.parse(b.time) - Date.parse(a.time));
+  const taken = new Map<string, number>();
+  const guaranteed = new Set<NewsItem>();
+  for (const n of newest) {
+    const c = taken.get(n.source) ?? 0;
+    if (c < PER_SOURCE_MIN) { guaranteed.add(n); taken.set(n.source, c + 1); }
+  }
+  const out = [...guaranteed];
+  for (const n of newest) if (out.length < limit && !guaranteed.has(n)) out.push(n);
+  return out.sort((a, b) => Date.parse(b.time) - Date.parse(a.time));
+}
 
 /** The city and country to look up local news for: the one the visitor picked, else their connection's. */
 export function localPlaceFrom(request: Request): LocalPlace | null {
@@ -87,10 +102,7 @@ async function alertsResponse(request: Request, env: Env, ctx: Ctx): Promise<Res
   const everything = stored ? allItems(stored) : [];
   const place = placeFrom(request);
   const items = personalise(everything.filter((i): i is Alert => i.category === 'hazard'), place);
-  const news = everything
-    .filter((i): i is NewsItem => i.category !== 'hazard')
-    .sort((a, b) => Date.parse(b.time) - Date.parse(a.time))
-    .slice(0, NEWS_LIMIT);
+  const news = pickNews(everything.filter((i): i is NewsItem => i.category !== 'hazard'));
   const local = await localNews(request, ctx);
   const sources = Object.fromEntries(Object.entries(stored?.sources ?? {}).map(([k, v]) => [k, { ok: v.ok, updatedAt: v.updatedAt, ...(v.ok ? {} : { error: v.error }) }]));
   return json(
