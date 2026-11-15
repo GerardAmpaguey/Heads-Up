@@ -23,7 +23,7 @@ export const LOCAL_FEEDS: LocalFeed[] = [
     urls: ['https://baguioheraldexpressonline.com/feed/', 'https://baguioheraldexpressonline.com/feed/?paged=2', 'https://baguioheraldexpressonline.com/category/city/feed/'],
     // This paper's feed carries no pictures, but its WordPress API gives each story's featured image.
     wp: 'https://baguioheraldexpressonline.com/wp-json/wp/v2/posts?per_page=40&_embed=wp:featuredmedia&_fields=link,_links,_embedded',
-    places: ['baguio', 'benguet', 'la trinidad', 'itogon', 'tuba', 'sablan', 'tublay', 'bauang', 'la union', 'san fernando', 'cordillera'],
+    places: ['baguio', 'benguet', 'la trinidad', 'itogon', 'tuba', 'sablan', 'tublay'],
   },
 ];
 
@@ -45,8 +45,9 @@ export function wpPhotos(json: unknown): Photos {
 }
 
 export function localFeedsFor(place: LocalPlace): LocalFeed[] {
-  const n = place.name.toLowerCase();
-  return LOCAL_FEEDS.filter((f) => f.places.some((p) => n.includes(p)));
+  // Whole names only: "Tuba" must not match "Tubao", and "Baguio City" counts as Baguio.
+  const n = place.name.toLowerCase().replace(/^city of /, '').replace(/ city$/, '').trim();
+  return LOCAL_FEEDS.filter((f) => f.places.includes(n));
 }
 
 const NAME_OK = /^[\p{L}\p{N} .'’()-]{2,60}$/u;

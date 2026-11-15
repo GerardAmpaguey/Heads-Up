@@ -350,7 +350,7 @@ main:focus, main:focus-visible { outline: none; }
 .picker__input { width: 100%; margin-top: 1rem; padding: 0.7rem 0.95rem; border: 1px solid var(--line); border-radius: 12px; background: var(--page); color: var(--ink); font: inherit; }
 .picker__input:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
 .picker__list { margin-top: 0.6rem; display: grid; gap: 0.15rem; list-style: none; padding: 0; min-height: 1.5rem; }
-.picker__opt { width: 100%; padding: 0.6rem 0.7rem; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.picker__opt { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; width: 100%; padding: 0.6rem 0.7rem; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
 .picker__opt:hover, .picker__opt:focus-visible { background: var(--surface); }
 .picker__status { margin-top: 0.5rem; color: var(--muted); font-size: 0.92rem; min-height: 1.3rem; }
 .picker__actions { margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 0.6rem; }
@@ -361,3 +361,17 @@ main:focus, main:focus-visible { outline: none; }
 .paged > .tiles { margin-top: 0; }
 .more-wrap { display: flex; justify-content: center; margin-top: 2rem; }
 .more[hidden] { display: none; }
+
+.picker__form { display: flex; gap: 0.5rem; margin-top: 1rem; }
+.picker__form .picker__input { margin-top: 0; flex: 1; min-width: 0; }
+.picker__kind { flex: none; color: var(--muted); font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
+.picker__back { margin: 0 0 0.6rem; padding: 0.2rem 0; border: 0; background: transparent; color: var(--blue); font: 700 0.92rem var(--sans); cursor: pointer; }
+.picker__back:hover { text-decoration: underline; text-underline-offset: 3px; }
+.picker__whole { margin-top: 0.9rem; width: 100%; }
+.picker__list--long { max-height: min(50dvh, 22rem); overflow-y: auto; overscroll-behavior: contain; }
+.picker__list [hidden] { display: none; }
+.picker__pair { display: flex; align-items: stretch; }
+.picker__pair .picker__opt { flex: 1; min-width: 0; }
+.picker__more { flex: none; width: 2.75rem; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 1.4rem; cursor: pointer; }
+.picker__more:hover, .picker__more:focus-visible { background: var(--surface); color: var(--ink); }
+.picker { width: min(30rem, calc(100% - 2rem)); }

@@ -1,4 +1,5 @@
 import { CATEGORIES, SEVERITY } from './data.js';
+import { barangaysOf, citiesOf, provinces, resolve, reverse, searchPlaces, townLabel } from './places.js';
 
 // Everything on the page comes from /api/alerts. Nothing is made up.
 const ITEMS = [];
@@ -140,45 +141,9 @@ function showLocation(loc) {
 
 const picker = document.getElementById('picker');
 
-async function searchPlaces(text, signal) {
-  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(text)}&count=8&language=en&format=json`;
-  const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`status ${res.status}`);
-  const data = await res.json();
-  const seen = new Set();
-  const out = [];
-  for (const r of data.results || []) {
-    if (!Number.isFinite(r.latitude) || !Number.isFinite(r.longitude)) continue;
-    // In the Philippines the source's "admin1" is an old region grouping (it files Benguet under Ilocos), so
-    // use the province instead. Elsewhere admin1 is the state or province.
-    const area = r.country_code === 'PH' ? r.admin2 : r.admin1;
-    const label = [r.name, area && area !== r.name ? area : null, r.country].filter(Boolean).join(', ');
-    if (seen.has(label)) continue;
-    seen.add(label);
-    out.push({ label, name: r.name, cc: r.country_code, lat: Math.round(r.latitude * 100) / 100, lon: Math.round(r.longitude * 100) / 100 });
-  }
-  return out;
-}
-
-/* A device location is only coordinates. Local news needs a town name, so look one up (OpenStreetMap Nominatim). */
-async function nameFor(lat, lon) {
-  try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=en&lat=${lat}&lon=${lon}`, { signal: AbortSignal.timeout(6000) });
-    if (!res.ok) return null;
-    const a = (await res.json()).address || {};
-    const name = a.city || a.town || a.municipality || a.village || a.county || a.state_district;
-    if (!name) return null;
-    let country = '';
-    try { country = new Intl.DisplayNames(['en'], { type: 'region' }).of((a.country_code || '').toUpperCase()); } catch {}
-    const cc = (a.country_code || '').toUpperCase();
-    const area = (cc === 'PH' ? a.county : a.state || a.county)?.replace(/ Province$/, '');
-    return { name, cc: cc || undefined, label: [name, area && area !== name ? area : null, country].filter(Boolean).join(', ') };
-  } catch { return null; }
-}
-
 async function chooseLocation(next) {
   if (next && !next.name) {
-    const found = await nameFor(next.lat, next.lon);
+    const found = await reverse(next.lat, next.lon).catch(() => null);
     if (found) next = { ...next, ...found };
   }
   place = next;
@@ -190,57 +155,133 @@ async function chooseLocation(next) {
   route();
 }
 
+/* The picker has four screens: search, provinces, cities and towns of a province, barangays of a city. */
 function openPicker() {
-  const input = el('input', { class: 'picker__input', id: 'picker-input', type: 'search', placeholder: 'City or town, like Baguio', autocomplete: 'off', 'aria-label': 'Search for a city or town' });
-  const status = el('p', { class: 'picker__status', role: 'status' });
-  const list = el('ul', { class: 'picker__list' });
-  let timer;
   let ctl;
+  const status = el('p', { class: 'picker__status', role: 'status' });
+  const body = el('div', { class: 'picker__body' });
+  const say = (text) => { status.textContent = text; };
+  const fresh = () => { ctl?.abort(); ctl = new AbortController(); return ctl.signal; };
+  const failed = (err) => { if (err.name !== 'AbortError') say('Could not load places right now. Check your connection and try again.'); };
 
-  const show = (places) => {
-    list.replaceChildren(...places.map((p) => el('li', {}, el('button', { class: 'picker__opt', type: 'button', onclick: () => chooseLocation(p) }, p.label))));
+  const finish = async (spec) => {
+    say('Finding it on the map…');
+    try {
+      const found = await resolve(spec, fresh());
+      if (!found) { say('Could not find that place on the map. Try searching for it by name.'); return; }
+      await chooseLocation(found);
+    } catch (err) { failed(err); }
   };
-  input.addEventListener('input', () => {
-    clearTimeout(timer);
-    ctl?.abort();
-    const text = input.value.trim();
-    if (text.length < 2) { list.replaceChildren(); status.textContent = ''; return; }
-    timer = setTimeout(async () => {
-      ctl = new AbortController();
-      status.textContent = 'Searching…';
-      try {
-        const places = await searchPlaces(text, ctl.signal);
-        show(places);
-        status.textContent = places.length ? '' : 'No places match that name.';
-      } catch (err) {
-        if (err.name !== 'AbortError') { list.replaceChildren(); status.textContent = 'Place search is not available right now. Try again in a moment.'; }
-      }
-    }, 300);
-  });
 
-  const useDevice = el('button', { class: 'btn btn--ghost', type: 'button', onclick: () => {
-    if (!navigator.geolocation) { status.textContent = 'This browser cannot share your location.'; return; }
-    status.textContent = 'Waiting for your browser to share your location…';
-    navigator.geolocation.getCurrentPosition(
-      (pos) => chooseLocation({ label: 'My device location', lat: Math.round(pos.coords.latitude * 100) / 100, lon: Math.round(pos.coords.longitude * 100) / 100 }),
-      () => { status.textContent = 'Your browser did not share the location. Search for your town instead.'; },
-      { timeout: 10000, maximumAge: 600000 },
+  const filterBox = (list, label) => {
+    const input = el('input', { class: 'picker__input', type: 'search', placeholder: label, 'aria-label': label, autocomplete: 'off' });
+    input.addEventListener('input', () => {
+      const q = input.value.trim().toLowerCase();
+      for (const li of list.children) li.hidden = q !== '' && !li.dataset.name.includes(q);
+    });
+    return input;
+  };
+  const row = (name, ...kids) => el('li', { 'data-name': name.toLowerCase() }, ...kids);
+  const back = (text, go) => el('button', { class: 'picker__back', type: 'button', onclick: go }, `‹ ${text}`);
+  const frame = (...kids) => body.replaceChildren(...kids, status, el('p', { class: 'picker__credit' }, 'Places from ', el('a', { href: 'https://www.openstreetmap.org/copyright', target: '_blank', rel: 'noopener noreferrer' }, 'OpenStreetMap'), ' and the ', el('a', { href: 'https://psgc.gitlab.io/', target: '_blank', rel: 'noopener noreferrer' }, 'Philippine Standard Geographic Code'), '.'));
+
+  function searchScreen() {
+    say('');
+    const list = el('ul', { class: 'picker__list' });
+    const input = el('input', { class: 'picker__input', id: 'picker-input', type: 'search', placeholder: 'Town, city, province or barangay', autocomplete: 'off', 'aria-label': 'Search for a place' });
+    const form = el('form', { class: 'picker__form', role: 'search' }, input, el('button', { class: 'btn btn--solid', type: 'submit' }, 'Search'));
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (text.length < 2) return;
+      list.replaceChildren();
+      say('Searching…');
+      try {
+        const found = await searchPlaces(text, fresh());
+        list.replaceChildren(...found.map((p) => el('li', {}, el('button', { class: 'picker__opt', type: 'button', onclick: () => chooseLocation(p) }, el('span', {}, p.label), p.kind && el('span', { class: 'picker__kind' }, p.kind)))));
+        say(found.length ? '' : 'No places match that name. Try a nearby town, or browse by province.');
+      } catch (err) { failed(err); }
+    });
+    const useDevice = el('button', { class: 'btn btn--ghost', type: 'button', onclick: () => {
+      if (!navigator.geolocation) { say('This browser cannot share your location.'); return; }
+      say('Waiting for your browser to share your location…');
+      navigator.geolocation.getCurrentPosition(
+        (pos) => chooseLocation({ label: 'My device location', lat: Math.round(pos.coords.latitude * 100) / 100, lon: Math.round(pos.coords.longitude * 100) / 100 }),
+        () => say('Your browser did not share the location. Search for your town instead.'),
+        { timeout: 10000, maximumAge: 600000 },
+      );
+    } }, 'Use my device location');
+    frame(
+      el('h2', { class: 'picker__title', id: 'picker-title' }, 'Where are you?'),
+      el('p', { class: 'picker__hint' }, place ? `Showing hazards and news near ${place.label}.` : 'Hazards and local news follow this place. It is saved only on this device.'),
+      form, list,
+      el('div', { class: 'picker__actions' },
+        el('button', { class: 'btn btn--ghost', type: 'button', onclick: provinceScreen }, 'Browse Philippine provinces'),
+        useDevice,
+        place && el('button', { class: 'btn btn--ghost', type: 'button', onclick: () => chooseLocation(null) }, 'Use my connection’s location'),
+      ),
     );
-  } }, 'Use my device location');
-  const useAuto = el('button', { class: 'btn btn--ghost', type: 'button', onclick: () => chooseLocation(null) }, 'Use my connection’s location');
+    input.focus();
+  }
+
+  async function listScreen({ title, hint, backText, onBack, top, load, item, filterLabel }) {
+    say('Loading…');
+    const list = el('ul', { class: 'picker__list picker__list--long' });
+    frame(back(backText, onBack), el('h2', { class: 'picker__title', id: 'picker-title' }, title), el('p', { class: 'picker__hint' }, hint));
+    try {
+      const rows = await load(fresh());
+      list.replaceChildren(...rows.map(item));
+      const box = filterBox(list, filterLabel);
+      frame(back(backText, onBack), el('h2', { class: 'picker__title', id: 'picker-title' }, title), el('p', { class: 'picker__hint' }, hint), top, box, list);
+      say(rows.length ? '' : 'Nothing listed here.');
+      box.focus();
+    } catch (err) { failed(err); }
+  }
+
+  const opt = (text, onclick, extra) => el('button', { class: 'picker__opt', type: 'button', onclick }, el('span', {}, text), extra);
+
+  function provinceScreen() {
+    listScreen({
+      title: 'Choose a province', hint: 'Then pick a city or town, and a barangay if you like.',
+      backText: 'Search', onBack: searchScreen, filterLabel: 'Filter provinces', load: provinces,
+      item: (p) => row(p.name, opt(p.name, () => townScreen(p), el('span', { class: 'picker__kind' }, 'Cities and towns ›'))),
+    });
+  }
+
+  function townScreen(province) {
+    const parts = [province.name];
+    listScreen({
+      title: province.name, hint: 'Pick a city or town. Use › to go down to its barangays.',
+      backText: 'Provinces', onBack: provinceScreen, filterLabel: `Filter places in ${province.name}`, load: (s) => citiesOf(province, s),
+      top: el('button', { class: 'btn btn--ghost picker__whole', type: 'button', onclick: () => finish({ title: province.name, newsName: province.name, parts }) }, `Use all of ${province.name}`),
+      item: (c) => {
+        const shown = townLabel(c);
+        const town = c.name.replace(/^City of /, '');
+        return row(shown, el('div', { class: 'picker__pair' },
+          opt(shown, () => finish({ title: shown, newsName: town, parts: [town, province.name] })),
+          el('button', { class: 'picker__more', type: 'button', 'aria-label': `Barangays of ${shown}`, onclick: () => barangayScreen(province, c) }, '›'),
+        ));
+      },
+    });
+  }
+
+  function barangayScreen(province, city) {
+    const shown = townLabel(city);
+    const town = city.name.replace(/^City of /, '');
+    listScreen({
+      title: shown, hint: `Barangays in ${province.name}. Local news is searched by the city or town.`,
+      backText: province.name, onBack: () => townScreen(province), filterLabel: `Filter barangays in ${shown}`, load: (s) => barangaysOf(city, s),
+      top: el('button', { class: 'btn btn--ghost picker__whole', type: 'button', onclick: () => finish({ title: shown, newsName: town, parts: [town, province.name] }) }, `Use all of ${shown}`),
+      item: (b) => row(b.name, opt(b.name, () => finish({ title: b.name, newsName: town, parts: [b.name, town, province.name] }))),
+    });
+  }
 
   picker.replaceChildren(
     el('button', { class: 'sheet__close', type: 'button', 'aria-label': 'Close', onclick: () => picker.close() }, '×'),
-    el('div', { class: 'picker__body' },
-      el('h2', { class: 'picker__title', id: 'picker-title' }, 'Where are you?'),
-      el('p', { class: 'picker__hint' }, place ? `Showing hazards near ${place.label}.` : 'Hazards are ranked by distance from this place. It is saved only on this device.'),
-      input, status, list,
-      el('div', { class: 'picker__actions' }, useDevice, place && useAuto),
-      el('p', { class: 'picker__credit' }, 'Place search by ', el('a', { href: 'https://open-meteo.com/', target: '_blank', rel: 'noopener noreferrer' }, 'Open-Meteo'), ' (data from GeoNames).'),
-    ),
+    body,
   );
+  searchScreen();
   picker.showModal();
-  input.focus();
 }
 
 document.getElementById('where').addEventListener('click', openPicker);
@@ -677,5 +718,5 @@ lastPath = location.hash.split('?')[0];
 route();
 start();
 if (place && !place.name) {
-  nameFor(place.lat, place.lon).then((found) => { if (found) { place = { ...place, ...found }; savePlace(place); showLocation(feed.data?.location); loadFeed().then(route); } });
+  reverse(place.lat, place.lon).catch(() => null).then((found) => { if (found) { place = { ...place, ...found }; savePlace(place); showLocation(feed.data?.location); loadFeed().then(route); } });
 }

@@ -149,6 +149,7 @@ test('a local paper\'s own feed is read, and its stories count as about the area
   assert.deepEqual(items.map((i) => [i.title, i.severity, i.source]), [['BWD warns of long-term groundwater supply risks', 'heads-up', 'Baguio Herald Express']]);
   assert.equal(localFeedsFor({ name: 'Baguio City' }).length, 1);
   assert.equal(localFeedsFor({ name: 'Manila' }).length, 0);
+  for (const other of ['Bauang', 'Tubao', 'Dagupan', 'San Fernando', 'Pangasinan']) assert.equal(localFeedsFor({ name: other }).length, 0, other);
 });
 
 test('local stories keep a photo from the paper feed or from Bing\'s News:Image', () => {
