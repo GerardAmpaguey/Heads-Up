@@ -145,7 +145,7 @@ export function parseFeed(xml: string, { images = true }: { images?: boolean } =
     const ms = Date.parse(when);
     if (!title || !link || !Number.isFinite(ms)) continue;
     const text = shorten(plainText(inner(block, 'description') ?? inner(block, 'summary') ?? inner(block, 'content:encoded') ?? inner(block, 'content') ?? ''));
-    const publisher = plainText(inner(block, 'source') ?? '') || undefined;
+    const publisher = plainText(inner(block, 'source') ?? inner(block, 'News:Source') ?? '') || undefined;
     out.push({ title, link, time: new Date(ms).toISOString(), text, image: images ? imageOf(block) : undefined, publisher });
   }
   return out;

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker, { localPlaceFrom } from '../src/worker.ts';
-import { countryCode, normaliseLocal, placeName, rateLocal, searchUrl } from '../src/local.ts';
+import { bingUrl, countryCode, normaliseLocal, placeName, rateLocal, realLink, searchUrl } from '../src/local.ts';
 
 const NOW = new Date('2026-11-15T12:00:00Z');
 const at = (h) => new Date(NOW.getTime() - h * 3_600_000).toUTCString();
@@ -85,8 +85,32 @@ test('the API returns local news for the picked place, and survives the news sou
     assert.ok(body.local.items.length >= 1);
     globalThis.fetch = async () => new Response('down', { status: 503 });
     const down = await (await worker.fetch(withCf('https://x.test/api/alerts?lat=16.4&lon=120.6&city=Baguio&cc=PH', {}), e, ctx())).json();
-    assert.deepEqual(down.local, { place: 'Baguio', ok: false, items: [], error: 'news answered 503' });
+    assert.deepEqual(down.local, { place: 'Baguio', ok: false, items: [], error: 'news answered 503; news answered 503' });
     const none = await (await worker.fetch(new Request('https://x.test/api/alerts'), e, ctx())).json();
     assert.deepEqual(none.local, { place: null, ok: true, items: [] });
   } finally { globalThis.fetch = real; }
+});
+
+const bing = `<?xml version="1.0"?><rss version="2.0" xmlns:News="https://www.bing.com/news/search?q=x&amp;format=rss"><channel>
+<item><title>Flood waters rise in Baguio after overnight rains</title><link>http://www.bing.com/news/apiclick.aspx?ref=FexRss&amp;aid=&amp;tid=1&amp;url=https%3a%2f%2fwww.example.ph%2fnews%2fflood&amp;c=1</link><description>Several barangays in Baguio City were flooded early Sunday after heavy overnight rains, officials said.</description><pubDate>${new Date(NOW.getTime() - 2 * 3_600_000).toUTCString()}</pubDate><News:Source>Example PH</News:Source></item>
+<item><title>Typhoon Kiko to make landfall in northern Luzon</title><link>http://www.bing.com/news/apiclick.aspx?url=javascript%3aalert(1)</link><pubDate>${new Date(NOW.getTime() - 2 * 3_600_000).toUTCString()}</pubDate><News:Source>Dup</News:Source></item>
+</channel></rss>`;
+
+test('bing: real link is read from the redirect, snippet used, publisher read, duplicates across sources dropped', () => {
+  assert.equal(realLink('http://www.bing.com/news/apiclick.aspx?ref=x&url=https%3a%2f%2fwww.example.ph%2fa'), 'https://www.example.ph/a');
+  assert.equal(realLink('https://news.google.com/rss/articles/abc'), 'https://news.google.com/rss/articles/abc');
+  assert.equal(realLink('http://www.bing.com/news/apiclick.aspx?url=javascript%3aalert(1)'), 'http://www.bing.com/news/apiclick.aspx?url=javascript%3aalert(1)'.replace('http:', 'http:'));
+  const items = normaliseLocal([rss, bing], { name: 'Baguio', cc: 'PH' }, NOW);
+  const flood = items.find((i) => i.source === 'Example PH');
+  assert.equal(flood.url, 'https://www.example.ph/news/flood');
+  assert.match(flood.summary, /Several barangays/);
+  assert.equal(flood.severity, 'heads-up');
+  assert.equal(items.filter((i) => /Typhoon Kiko/.test(i.title)).length, 1, 'same headline from both sources appears once');
+});
+
+test('bing url asks for the place and topics in the right market', () => {
+  const u = decodeURIComponent(bingUrl({ name: 'Baguio', cc: 'PH' }));
+  assert.match(u, /format=rss/);
+  assert.match(u, /"Baguio" \(typhoon OR/);
+  assert.match(u, /setmkt=en-PH/);
 });

@@ -1,6 +1,6 @@
 import { personalise, type Alert, type LocalItem, type NewsItem, type Place } from './alerts.ts';
 import { allItems, isStale, load, refresh, type KV } from './store.ts';
-import { cacheKey, countryCode, normaliseLocal, placeName, searchUrl, type LocalPlace } from './local.ts';
+import { bingUrl, cacheKey, countryCode, normaliseLocal, placeName, searchUrl, type LocalPlace } from './local.ts';
 
 type Env = {
   ALERTS: KV;
@@ -59,9 +59,16 @@ async function localNews(request: Request, ctx: Ctx): Promise<{ place: string | 
   try {
     let hit = await cache?.match(key);
     if (!hit) {
-      const res = await fetch(searchUrl(place), { headers: { 'user-agent': 'Heads-Up/0.1 (+https://heads-up.ampagueyg.workers.dev)' }, signal: AbortSignal.timeout(8000) });
-      if (!res.ok) throw new Error(`news answered ${res.status}`);
-      const items = normaliseLocal(await res.text(), place);
+      // Ask Google News and Bing News together and merge what comes back. Either can be slow or refuse us.
+      const ask = async (url: string) => {
+        const res = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; Heads-Up/0.1; +https://heads-up.ampagueyg.workers.dev)', accept: 'application/rss+xml, application/xml, text/xml' }, signal: AbortSignal.timeout(6000) });
+        if (!res.ok) throw new Error(`news answered ${res.status}`);
+        return res.text();
+      };
+      const results = await Promise.allSettled([ask(searchUrl(place)), ask(bingUrl(place))]);
+      const xmls = results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map((r) => r.value);
+      if (xmls.length === 0) throw new Error(results.map((r) => (r as PromiseRejectedResult).reason?.message ?? 'failed').join('; '));
+      const items = normaliseLocal(xmls, place);
       hit = new Response(JSON.stringify(items), { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=1800' } });
       if (cache) ctx.waitUntil(cache.put(key, hit.clone()).catch(() => undefined));
     }
