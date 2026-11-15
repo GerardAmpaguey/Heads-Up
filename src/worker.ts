@@ -1,6 +1,6 @@
 import { personalise, type Alert, type LocalItem, type NewsItem, type Place } from './alerts.ts';
 import { allItems, isStale, load, refresh, type KV } from './store.ts';
-import { bingUrl, cacheKey, countryCode, localFeedsFor, normaliseLocal, placeName, searchUrl, type LocalPlace } from './local.ts';
+import { bingUrl, cacheKey, countryCode, localFeedsFor, normaliseLocal, wpPhotos, placeName, searchUrl, type LocalPlace } from './local.ts';
 
 type Env = {
   ALERTS: KV;
@@ -84,9 +84,10 @@ async function localNews(request: Request, ctx: Ctx): Promise<{ place: string | 
       const feeds = localFeedsFor(place);
       const asks = feeds.flatMap((f) => f.urls.map((u) => ask(u).then((xml) => ({ publisher: f.publisher, xml }))));
       const papers = (await Promise.allSettled(asks)).flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+      const photos = Object.assign({}, ...(await Promise.allSettled(feeds.filter((f) => f.wp).map((f) => ask(f.wp!).then((t) => wpPhotos(JSON.parse(t)))))).flatMap((r) => (r.status === 'fulfilled' ? [r.value] : [])));
       const xmls = results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map((r) => r.value);
       if (xmls.length === 0 && papers.length === 0) throw new Error(results.map((r) => (r as PromiseRejectedResult).reason?.message ?? 'failed').join('; '));
-      const items = normaliseLocal(xmls, place, new Date(), 30, papers);
+      const items = normaliseLocal(xmls, place, new Date(), 30, papers, photos);
       hit = new Response(JSON.stringify(items), { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=1800' } });
       if (cache) ctx.waitUntil(cache.put(key, hit.clone()).catch(() => undefined));
     }

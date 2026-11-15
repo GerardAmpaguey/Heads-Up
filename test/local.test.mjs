@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker, { localPlaceFrom, pickNews } from '../src/worker.ts';
-import { localFeedsFor, bingUrl, countryCode, normaliseLocal, placeName, rateLocal, realLink, searchUrl } from '../src/local.ts';
+import { localFeedsFor, bingUrl, countryCode, normaliseLocal, placeName, rateLocal, realLink, searchUrl, wpPhotos } from '../src/local.ts';
 
 const NOW = new Date('2026-11-15T12:00:00Z');
 const at = (h) => new Date(NOW.getTime() - h * 3_600_000).toUTCString();
@@ -160,4 +160,18 @@ test('local stories keep a photo from the paper feed or from Bing\'s News:Image'
   assert.equal(by['Water district warns of shortage'].image, 'https://p.test/wp-content/a.jpg');
   assert.equal(by['Water district warns of shortage'].imageCredit, 'Herald');
   assert.match(by['Baguio flood warning raised'].image, /^https:\/\/www\.bing\.com\/th\?id=ONE\.b\.jpg&pid=News$/);
+});
+
+test('a WordPress response gives featured images by story link, with a clean credit', () => {
+  const photos = wpPhotos([
+    { link: 'https://p.test/a/', _embedded: { 'wp:featuredmedia': [{ source_url: 'https://p.test/a-scaled.jpg', media_details: { sizes: { large: { source_url: 'https://p.test/a-large.jpg' } } }, caption: { rendered: '<p>📸Fuji Sakai</p>\n' } }] } },
+    { link: 'https://p.test/b/', _embedded: { 'wp:featuredmedia': [{ source_url: 'http://p.test/insecure.jpg' }] } },
+    { link: 'https://p.test/c/' },
+  ]);
+  assert.deepEqual(photos, { 'https://p.test/a': { image: 'https://p.test/a-large.jpg', credit: 'Fuji Sakai' } });
+  const pub = new Date(NOW.getTime() - 5 * 3_600_000).toUTCString();
+  const wp = `<rss><channel><item><title>Water district warns of shortage</title><link>https://p.test/a/</link><pubDate>${pub}</pubDate><description>Short.</description></item></channel></rss>`;
+  const [item] = normaliseLocal([], { name: 'Baguio' }, NOW, 30, [{ publisher: 'Herald', xml: wp }], photos);
+  assert.equal(item.image, 'https://p.test/a-large.jpg');
+  assert.equal(item.imageCredit, 'Fuji Sakai');
 });

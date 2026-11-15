@@ -15,15 +15,34 @@ const TOPICS = [
 
 /** Local newspapers read directly, because search engines often miss them or bury them. A paper's feed is
  *  used for the places it covers, and everything in it counts as being about that area. */
-export type LocalFeed = { publisher: string; urls: string[]; places: string[] };
+export type LocalFeed = { publisher: string; urls: string[]; places: string[]; wp?: string };
 export const LOCAL_FEEDS: LocalFeed[] = [
   {
     publisher: 'Baguio Herald Express',
     // The main feed holds only the latest ten stories, so the City section and a second page are read too.
     urls: ['https://baguioheraldexpressonline.com/feed/', 'https://baguioheraldexpressonline.com/feed/?paged=2', 'https://baguioheraldexpressonline.com/category/city/feed/'],
+    // This paper's feed carries no pictures, but its WordPress API gives each story's featured image.
+    wp: 'https://baguioheraldexpressonline.com/wp-json/wp/v2/posts?per_page=40&_embed=wp:featuredmedia&_fields=link,_embedded',
     places: ['baguio', 'benguet', 'la trinidad', 'itogon', 'tuba', 'sablan', 'tublay', 'bauang', 'la union', 'san fernando', 'cordillera'],
   },
 ];
+
+export type Photos = Record<string, { image: string; credit?: string }>;
+const linkKey = (u: string) => u.replace(/[?#].*$/, '').replace(/\/+$/, '').toLowerCase();
+
+/** Featured images from a WordPress posts response, keyed by story link. Only https pictures are kept. */
+export function wpPhotos(json: unknown): Photos {
+  const out: Photos = {};
+  if (!Array.isArray(json)) return out;
+  for (const p of json as Record<string, any>[]) {
+    const media = p?._embedded?.['wp:featuredmedia']?.[0];
+    const src = media?.media_details?.sizes?.large?.source_url ?? media?.source_url;
+    if (typeof p?.link !== 'string' || typeof src !== 'string' || !src.startsWith('https://')) continue;
+    const caption = typeof media?.caption?.rendered === 'string' ? media.caption.rendered.replace(/<[^>]*>/g, '').replace(/[^\p{L}\p{N} .,'’&()-]/gu, '').replace(/^(photo|photos|image|credit|courtesy)\s*(by|:)?\s*/i, '').trim() : '';
+    out[linkKey(p.link)] = { image: src, ...(caption.length > 1 && caption.length <= 60 ? { credit: caption } : {}) };
+  }
+  return out;
+}
 
 export function localFeedsFor(place: LocalPlace): LocalFeed[] {
   const n = place.name.toLowerCase();
@@ -99,7 +118,7 @@ const snippet = (text: string, title: string): string | null =>
 const norm = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
 /** Turn a Google News search feed into local items, newest first. Duplicate headlines are dropped. */
-export function normaliseLocal(xmls: string | string[], place: LocalPlace, now = new Date(), limit = 30, papers: { publisher: string; xml: string }[] = []): LocalItem[] {
+export function normaliseLocal(xmls: string | string[], place: LocalPlace, now = new Date(), limit = 30, papers: { publisher: string; xml: string }[] = [], photos: Photos = {}): LocalItem[] {
   const seen = new Set<string>();
   const items: LocalItem[] = [];
   const found = [
@@ -135,7 +154,7 @@ export function normaliseLocal(xmls: string | string[], place: LocalPlace, now =
       source: publisher,
       url: realLink(e.link),
       time: e.time,
-      ...(e.image ? { image: e.image, imageCredit: publisher } : {}),
+      ...(photos[linkKey(e.link)] ? { image: photos[linkKey(e.link)]!.image, imageCredit: photos[linkKey(e.link)]!.credit ?? publisher } : e.image ? { image: e.image, imageCredit: publisher } : {}),
       tags: ['Local news'],
     });
   }
