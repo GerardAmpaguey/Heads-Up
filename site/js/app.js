@@ -51,82 +51,73 @@ function saveWatch(set) {
 }
 let watch = loadWatch();
 
-const bySeverityThenNew = (a, b) =>
-  SEVERITY[a.severity].rank - SEVERITY[b.severity].rank || a.ago - b.ago;
+const bySeverityThenNew = (a, b) => SEVERITY[a.severity].rank - SEVERITY[b.severity].rank || a.ago - b.ago;
+const byNew = (a, b) => a.ago - b.ago;
 const sorted = (list) => [...list].sort(bySeverityThenNew);
 const watched = () => ITEMS.filter((i) => i.tags.some((t) => watch.has(t)));
+const catRoute = (id) => (id === 'hazard' ? '#/around' : `#/${id}`);
 
 /* ---------- pieces ---------- */
 
 function sevPill(item) {
-  return el('span', { class: 'sev', 'data-sev': item.severity }, el('span', { class: 'sev__dot', 'aria-hidden': 'true' }), SEVERITY[item.severity].label);
+  return el('span', { class: 'sev', 'data-sev': item.severity }, SEVERITY[item.severity].label);
 }
 
 function art(item, cls) {
   return el('span', { class: cls, 'data-cat': item.category, html: ICONS[item.category] });
 }
 
-function card(item) {
-  return el(
-    'button',
-    { class: 'card', type: 'button', 'data-sev': item.severity, 'data-cat': item.category, onclick: () => openSheet(item) },
-    art(item, 'card__art'),
-    el('span', { class: 'card__top' }, sevPill(item)),
-    el('span', { class: 'card__body' },
-      el('span', { class: 'card__title' }, item.title),
-      el('span', { class: 'card__meta' }, `${item.source} · ${ago(item.ago)}`),
+/* Large lead story at the top of the front page. */
+function lead(item) {
+  return el('button', { class: 'lead', type: 'button', 'data-cat': item.category, onclick: () => openSheet(item) },
+    art(item, 'lead__art'),
+    el('span', { class: 'lead__text' },
+      el('span', { class: 'lead__kicker' }, sevPill(item), el('span', {}, `${CATEGORIES[item.category].label} · ${ago(item.ago)}`)),
+      el('span', { class: 'lead__title' }, item.title),
+      el('span', { class: 'lead__summary' }, item.summary),
     ),
   );
 }
 
-function row(title, items, seeAll) {
-  const track = el('ul', { class: 'row__track', tabindex: '-1' }, items.map((i) => el('li', {}, card(i))));
-  const step = (dir) => () => track.scrollBy({ left: dir * track.clientWidth * 0.85, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-  return el('section', { class: 'row' },
-    el('header', { class: 'row__head' },
-      el('h2', { class: 'row__title' }, title),
-      seeAll && el('a', { class: 'row__all', href: seeAll }, 'See all'),
-      el('span', { class: 'row__arrows' },
-        el('button', { type: 'button', class: 'arrow', 'aria-label': `Scroll ${title} back`, onclick: step(-1) }, '‹'),
-        el('button', { type: 'button', class: 'arrow', 'aria-label': `Scroll ${title} forward`, onclick: step(1) }, '›'),
-      ),
+/* Row with a small thumbnail, used in the side list and the Latest list. */
+function story(item, withSummary) {
+  return el('button', { class: 'story', type: 'button', 'data-sev': item.severity, onclick: () => openSheet(item) },
+    art(item, 'story__thumb'),
+    el('span', { class: 'story__body' },
+      el('span', { class: 'story__label' }, sevPill(item), el('span', {}, CATEGORIES[item.category].label)),
+      el('span', { class: 'story__title' }, item.title),
+      withSummary && el('span', { class: 'story__summary' }, item.summary),
+      el('span', { class: 'story__meta' }, `${item.source} · ${ago(item.ago)}`),
     ),
-    track,
   );
 }
 
-function grid(items, empty) {
+/* Image tile, used in section grids. */
+function tile(item) {
+  return el('button', { class: 'tile', type: 'button', 'data-sev': item.severity, onclick: () => openSheet(item) },
+    el('span', { class: 'tile__img', 'data-cat': item.category },
+      art(item, 'tile__art'),
+      el('span', { class: 'tile__tag' }, sevPill(item)),
+    ),
+    el('span', { class: 'tile__title' }, item.title),
+    el('span', { class: 'tile__meta' }, `${item.source} · ${ago(item.ago)}`),
+  );
+}
+
+function sectionHead(title, href, linkText = 'View more +') {
+  return el('header', { class: 'sec-head' },
+    el('h2', { class: 'sec-title' }, title),
+    href && el('a', { class: 'sec-more', href }, linkText),
+  );
+}
+
+function tileGrid(items, empty) {
   if (!items.length) return el('p', { class: 'empty' }, empty);
-  return el('ul', { class: 'grid' }, items.map((i) => el('li', {}, card(i))));
+  return el('ul', { class: 'tiles' }, items.map((i) => el('li', {}, tile(i))));
 }
 
-function hero(items) {
-  const top = items[0];
-  const also = items.slice(1, 4);
-  return el('section', { class: 'hero', 'data-cat': top.category, 'aria-labelledby': 'hero-title' },
-    art(top, 'hero__art'),
-    el('div', { class: 'hero__main' },
-      el('p', { class: 'hero__kicker' }, sevPill(top), el('span', {}, `${CATEGORIES[top.category].label} · ${ago(top.ago)}`)),
-      el('h1', { class: 'hero__title', id: 'hero-title' }, top.title),
-      el('p', { class: 'hero__summary' }, top.summary),
-      el('div', { class: 'hero__actions' },
-        el('button', { class: 'btn btn--solid', type: 'button', onclick: () => openSheet(top) }, 'What to do'),
-        el('a', { class: 'btn btn--ghost', href: top.url, target: '_blank', rel: 'noopener noreferrer' }, 'Open source ↗'),
-      ),
-    ),
-    also.length > 0 && el('aside', { class: 'hero__side', 'aria-label': 'Also needs attention' },
-      el('h2', { class: 'hero__side-title' }, 'Also needs attention'),
-      el('ol', { class: 'hero__list' }, also.map((i) =>
-        el('li', {}, el('button', { type: 'button', class: 'mini', 'data-sev': i.severity, onclick: () => openSheet(i) },
-          el('span', { class: 'mini__bar', 'aria-hidden': 'true' }),
-          el('span', { class: 'mini__text' },
-            el('span', { class: 'mini__title' }, i.title),
-            el('span', { class: 'mini__meta' }, `${SEVERITY[i.severity].label} · ${CATEGORIES[i.category].label}`),
-          ),
-        )),
-      )),
-    ),
-  );
+function panel(title, ...kids) {
+  return el('section', { class: 'panel' }, el('h2', { class: 'panel__title' }, title), ...kids);
 }
 
 /* ---------- detail sheet ---------- */
@@ -158,68 +149,119 @@ function openSheet(item) {
 
 sheet.addEventListener('click', (e) => { if (e.target === sheet) sheet.close(); });
 
-/* ---------- views ---------- */
+/* ---------- navigation ---------- */
 
 const TABS = [
-  { id: 'home', label: 'Home', href: '#/', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 11 8.5-7 8.5 7M6 9.5V20h12V9.5"/></svg>' },
-  { id: 'hazard', label: 'Around you', href: '#/around', icon: ICONS.hazard },
-  { id: 'webdev', label: 'Web dev', href: '#/webdev', icon: ICONS.webdev },
-  { id: 'ai', label: 'AI', href: '#/ai', icon: ICONS.ai },
-  { id: 'watchlist', label: 'Watchlist', href: '#/watchlist', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5h12v17l-6-4.2-6 4.2z"/></svg>' },
+  { id: 'home', label: 'Home', href: '#/' },
+  { id: 'hazard', label: 'Around you', href: '#/around' },
+  { id: 'webdev', label: 'Web dev', href: '#/webdev' },
+  { id: 'ai', label: 'AI', href: '#/ai' },
+  { id: 'latest', label: 'Latest', href: '#/latest' },
+  { id: 'watchlist', label: 'Watchlist', href: '#/watchlist' },
 ];
 
 function renderNav(active) {
-  const tabs = document.getElementById('tabs');
-  const dock = document.getElementById('dock');
   const count = watched().length;
-  const make = (t, withIcon) => el('a', { class: withIcon ? 'dock__link' : 'tab', href: t.href, 'aria-current': t.id === active ? 'page' : false },
-    withIcon && el('span', { class: 'dock__icon', html: t.icon }),
-    el('span', {}, t.label),
-    t.id === 'watchlist' && count > 0 && el('span', { class: 'badge', 'aria-label': `${count} items` }, String(count)),
+  document.getElementById('tabs').replaceChildren(...TABS.map((t) =>
+    el('a', { class: 'tab', href: t.href, 'aria-current': t.id === active ? 'page' : false },
+      t.label,
+      t.id === 'watchlist' && count > 0 && el('span', { class: 'badge', 'aria-label': `${count} items` }, String(count)),
+    )));
+}
+
+/* ---------- views ---------- */
+
+function watchPanel() {
+  const mine = sorted(watched());
+  if (!mine.length) {
+    return panel('Your watchlist',
+      el('p', { class: 'panel__text' }, 'Pick the tools you use, like WordPress or Astro, and their news shows up here.'),
+      el('a', { class: 'panel__link', href: '#/watchlist' }, 'Choose tools'),
+    );
+  }
+  return panel('Your watchlist',
+    el('ul', { class: 'panel__list' }, mine.slice(0, 4).map((i) => el('li', {}, story(i)))),
+    el('a', { class: 'panel__link', href: '#/watchlist' }, 'Edit watchlist'),
   );
-  tabs.replaceChildren(...TABS.map((t) => make(t, false)));
-  dock.replaceChildren(...TABS.map((t) => make(t, true)));
 }
 
 function homeView() {
-  const urgent = sorted(ITEMS.filter((i) => i.severity === 'urgent'));
-  const rest = sorted(ITEMS.filter((i) => i.severity === 'heads-up'));
-  const heroItems = [...urgent, ...rest];
-  const attention = heroItems.slice(1);
-  const out = [hero(heroItems), row('Needs attention', attention)];
-  const mine = sorted(watched());
-  if (mine.length) out.push(row('From your watchlist', mine, '#/watchlist'));
+  const ranked = sorted(ITEMS);
+  const top = ranked[0];
+  const side = ranked.slice(1, 5);
+  const latest = [...ITEMS].sort(byNew).slice(0, 7);
+  const urgent = ranked.filter((i) => i.severity === 'urgent');
+
+  const out = [
+    el('section', { class: 'front', 'aria-label': 'Top alerts' },
+      lead(top),
+      el('ul', { class: 'front__side' }, side.map((i) => el('li', {}, story(i)))),
+    ),
+
+    el('div', { class: 'cols' },
+      el('section', { class: 'cols__main', 'aria-labelledby': 'latest-title' },
+        el('header', { class: 'sec-head' },
+          el('h2', { class: 'sec-title', id: 'latest-title' }, 'Latest'),
+          el('a', { class: 'sec-more', href: '#/latest' }, 'View more +'),
+        ),
+        el('ul', { class: 'list' }, latest.map((i) => el('li', {}, story(i, true)))),
+      ),
+      el('aside', { class: 'cols__side', 'aria-label': 'Sidebar' },
+        panel(`Urgent now (${urgent.length})`,
+          urgent.length
+            ? el('ul', { class: 'panel__list' }, urgent.map((i) => el('li', {}, story(i))))
+            : el('p', { class: 'panel__text' }, 'Nothing urgent right now.'),
+        ),
+        watchPanel(),
+        panel('What we watch',
+          el('ul', { class: 'watching' }, Object.entries(CATEGORIES).map(([id, m]) =>
+            el('li', {}, el('a', { href: catRoute(id) }, el('strong', {}, m.label), el('span', {}, m.blurb))))),
+        ),
+      ),
+    ),
+  ];
+
   for (const [id, meta] of Object.entries(CATEGORIES)) {
-    const route = id === 'hazard' ? '#/around' : `#/${id}`;
-    out.push(row(meta.label, sorted(ITEMS.filter((i) => i.category === id)), route));
+    out.push(el('section', { class: 'block', 'aria-label': meta.label },
+      sectionHead(meta.label, catRoute(id)),
+      tileGrid(sorted(ITEMS.filter((i) => i.category === id)).slice(0, 4), 'Nothing here right now.'),
+    ));
   }
   return out;
+}
+
+function pageHead(title, blurb, ...extra) {
+  return el('header', { class: 'page-head' }, el('h1', { class: 'page-title' }, title), blurb && el('p', { class: 'page-blurb' }, blurb), ...extra);
 }
 
 function categoryView(id, filter) {
   const meta = CATEGORIES[id];
   const all = sorted(ITEMS.filter((i) => i.category === id));
   const shown = filter === 'all' ? all : all.filter((i) => i.severity === filter);
-  const base = id === 'hazard' ? '#/around' : `#/${id}`;
+  const base = catRoute(id);
   const chips = [['all', 'All', all.length], ...Object.entries(SEVERITY).map(([k, v]) => [k, v.label, all.filter((i) => i.severity === k).length])];
   return [
-    el('header', { class: 'page-head' },
-      el('h1', { class: 'page-title' }, meta.label),
-      el('p', { class: 'page-blurb' }, meta.blurb),
+    pageHead(meta.label, meta.blurb,
       el('div', { class: 'chips', role: 'group', 'aria-label': 'Filter by severity' },
-        chips.map(([k, label, n]) => el('a', { class: 'chip', 'data-sev': k, href: k === 'all' ? base : `${base}?s=${k}`, 'aria-current': k === filter ? 'true' : false }, `${label} `, el('span', { class: 'chip__n' }, String(n)))),
+        chips.map(([k, label, n]) => el('a', { class: 'chip', href: k === 'all' ? base : `${base}?s=${k}`, 'aria-current': k === filter ? 'true' : false }, `${label} `, el('span', { class: 'chip__n' }, String(n)))),
       ),
     ),
-    grid(shown, 'Nothing here right now.'),
+    tileGrid(shown, 'Nothing here right now.'),
+  ];
+}
+
+function latestView() {
+  const items = [...ITEMS].sort(byNew);
+  return [
+    pageHead('Latest', 'Everything, newest first.'),
+    el('ul', { class: 'list list--page' }, items.map((i) => el('li', {}, story(i, true)))),
   ];
 }
 
 function watchlistView() {
   const mine = sorted(watched());
   return [
-    el('header', { class: 'page-head' },
-      el('h1', { class: 'page-title' }, 'Watchlist'),
-      el('p', { class: 'page-blurb' }, 'Pick the tools you use. News about them shows up here.'),
+    pageHead('Watchlist', 'Pick the tools you use. News about them shows up here.',
       el('div', { class: 'chips', role: 'group', 'aria-label': 'Tools to watch' },
         STACK.map((t) => el('button', {
           class: 'chip chip--toggle', type: 'button', 'aria-pressed': watch.has(t) ? 'true' : 'false',
@@ -232,7 +274,7 @@ function watchlistView() {
         }, t)),
       ),
     ),
-    grid(mine, watch.size ? 'Nothing new for these tools right now.' : 'No tools picked yet. Choose some above.'),
+    tileGrid(mine, watch.size ? 'Nothing new for these tools right now.' : 'No tools picked yet. Choose some above.'),
   ];
 }
 
@@ -240,11 +282,8 @@ function searchView(q) {
   const needle = q.trim().toLowerCase();
   const hits = sorted(ITEMS.filter((i) => [i.title, i.summary, i.source, ...i.tags, CATEGORIES[i.category].label].join(' ').toLowerCase().includes(needle)));
   return [
-    el('header', { class: 'page-head' },
-      el('h1', { class: 'page-title' }, 'Search'),
-      el('p', { class: 'page-blurb' }, needle ? `${hits.length} result${hits.length === 1 ? '' : 's'} for “${q.trim()}”` : 'Type something to search.'),
-    ),
-    needle ? grid(hits, 'No alerts match that search.') : null,
+    pageHead('Search', needle ? `${hits.length} result${hits.length === 1 ? '' : 's'} for “${q.trim()}”` : 'Type something to search.'),
+    needle ? tileGrid(hits, 'No alerts match that search.') : null,
   ];
 }
 
@@ -259,12 +298,12 @@ function route() {
   if (path === 'around') { active = 'hazard'; view = categoryView('hazard', params.get('s') || 'all'); }
   else if (path === 'webdev') { active = 'webdev'; view = categoryView('webdev', params.get('s') || 'all'); }
   else if (path === 'ai') { active = 'ai'; view = categoryView('ai', params.get('s') || 'all'); }
+  else if (path === 'latest') { active = 'latest'; view = latestView(); }
   else if (path === 'watchlist') { active = 'watchlist'; view = watchlistView(); }
   else if (path === 'search') { active = ''; view = searchView(params.get('q') || ''); }
   else view = homeView();
 
-  const input = document.getElementById('q');
-  if (path !== 'search') input.value = '';
+  if (path !== 'search') document.getElementById('q').value = '';
   renderNav(active);
   main.replaceChildren(...view.filter(Boolean));
   document.title = active && active !== 'home' ? `${TABS.find((t) => t.id === active).label} · Heads Up` : 'Heads Up';

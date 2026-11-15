@@ -8,10 +8,13 @@ Front end only, filled with **demo data** (`site/js/data.js`). Nothing on the pa
 
 ## Layout
 
-- Hero for the most urgent alert, with an "Also needs attention" list on wide screens
-- Rows of poster cards you can scroll sideways, like a streaming site
-- Top tabs on desktop, bottom tab bar on phones: Home, Around you, Web dev, AI, Watchlist
-- Tap a card for what to do and a link to the source
+A news front page, built for scanning:
+
+- Lead story with a stacked list of the next most important alerts beside it
+- "Latest" list with thumbnails, plus a sidebar (urgent now, your watchlist, what we watch)
+- A tile section per topic (Around you, Web dev, AI) with "View more +"
+- Section tabs under the masthead: Home, Around you, Web dev, AI, Latest, Watchlist
+- Click any story for what to do and a link to the source
 - Watchlist: pick the tools you use, saved in the browser
 - Search across all alerts
 
