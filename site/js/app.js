@@ -157,7 +157,25 @@ async function searchPlaces(text, signal) {
   return out;
 }
 
+/* A device location is only coordinates. Local news needs a town name, so look one up (OpenStreetMap Nominatim). */
+async function nameFor(lat, lon) {
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=en&lat=${lat}&lon=${lon}`, { signal: AbortSignal.timeout(6000) });
+    if (!res.ok) return null;
+    const a = (await res.json()).address || {};
+    const name = a.city || a.town || a.municipality || a.village || a.county || a.state_district;
+    if (!name) return null;
+    let country = '';
+    try { country = new Intl.DisplayNames(['en'], { type: 'region' }).of((a.country_code || '').toUpperCase()); } catch {}
+    return { name, cc: (a.country_code || '').toUpperCase() || undefined, label: [name, country].filter(Boolean).join(', ') };
+  } catch { return null; }
+}
+
 async function chooseLocation(next) {
+  if (next && !next.name) {
+    const found = await nameFor(next.lat, next.lon);
+    if (found) next = { ...next, ...found };
+  }
   place = next;
   savePlace(next);
   picker.close();
@@ -561,10 +579,19 @@ function homeView() {
   for (const [id, meta] of Object.entries(CATEGORIES)) {
     out.push(el('section', { class: 'block', 'aria-label': meta.label },
       sectionHead(meta.label, catRoute(id), 'See all'),
-      tileGrid(sorted(ITEMS.filter((i) => i.category === id)).slice(0, 4), EMPTY[id]),
+      tileGrid(homePicks(id), EMPTY[id]),
     ));
   }
   return out;
+}
+
+/* On the front page, Around you shows hazards and local stories together so neither crowds out the other. */
+function homePicks(id) {
+  const list = sorted(ITEMS.filter((i) => i.category === id));
+  if (id !== 'hazard') return list.slice(0, 4);
+  const local = list.filter((i) => i.local).sort(byNew).slice(0, 2);
+  const hazards = list.filter((i) => !i.local).slice(0, 4 - local.length);
+  return sorted([...hazards, ...local]).slice(0, 4);
 }
 
 function pageHead(title, blurb, ...extra) {
@@ -574,16 +601,30 @@ function pageHead(title, blurb, ...extra) {
 function categoryView(id, filter) {
   const meta = CATEGORIES[id];
   const all = sorted(ITEMS.filter((i) => i.category === id));
-  const shown = filter === 'all' ? all : all.filter((i) => i.severity === filter);
+  const pick = (list) => (filter === 'all' ? list : list.filter((i) => i.severity === filter));
   const base = catRoute(id);
   const chips = [['all', 'All', all.length], ...Object.entries(SEVERITY).map(([k, v]) => [k, v.label, all.filter((i) => i.severity === k).length])];
-  return [
-    pageHead(meta.label, meta.blurb,
-      el('div', { class: 'chips', role: 'group', 'aria-label': 'Filter by severity' },
-        chips.map(([k, label, n]) => el('a', { class: 'chip', href: k === 'all' ? base : `${base}?s=${k}`, 'aria-current': k === filter ? 'true' : false }, `${label} `, el('span', { class: 'chip__n' }, String(n)))),
-      ),
+  const head = pageHead(meta.label, meta.blurb,
+    el('div', { class: 'chips', role: 'group', 'aria-label': 'Filter by severity' },
+      chips.map(([k, label, n]) => el('a', { class: 'chip', href: k === 'all' ? base : `${base}?s=${k}`, 'aria-current': k === filter ? 'true' : false }, `${label} `, el('span', { class: 'chip__n' }, String(n)))),
     ),
-    pagedTiles(shown, all.length ? 'Nothing in this group right now.' : EMPTY[id]),
+  );
+  if (id !== 'hazard') return [head, pagedTiles(pick(all), all.length ? 'Nothing in this group right now.' : EMPTY[id])];
+
+  // Local news gets its own section. Mixed in with the many earthquakes it would never be seen.
+  const news = all.filter((i) => i.local).sort(byNew);
+  const hazards = all.filter((i) => !i.local);
+  const local = feed.data?.local;
+  const where = local?.place;
+  let newsBody;
+  if (news.length) newsBody = pagedTiles(pick(news), 'Nothing in this group right now.');
+  else if (!where) newsBody = el('div', { class: 'empty' }, el('p', {}, 'Choose your town to see news from your area.'), el('button', { class: 'btn btn--solid', type: 'button', onclick: openPicker }, 'Choose location'));
+  else if (local.ok === false) newsBody = el('p', { class: 'empty' }, `Local news for ${where} could not be loaded just now. It will try again on your next visit.`);
+  else newsBody = el('p', { class: 'empty' }, `No recent news found for ${where}. Try a nearby city.`);
+  return [
+    head,
+    el('section', { class: 'block block--first', 'aria-label': 'Local news' }, sectionHead(where ? `Local news in ${where}` : 'Local news'), newsBody),
+    el('section', { class: 'block', 'aria-label': 'Hazards' }, sectionHead('Hazards near you'), pagedTiles(pick(hazards), hazards.length ? 'Nothing in this group right now.' : EMPTY.hazard)),
   ];
 }
 
@@ -650,3 +691,6 @@ document.getElementById('search').addEventListener('submit', (e) => {
 lastPath = location.hash.split('?')[0];
 route();
 start();
+if (place && !place.name) {
+  nameFor(place.lat, place.lon).then((found) => { if (found) { place = { ...place, ...found }; savePlace(place); showLocation(feed.data?.location); loadFeed().then(route); } });
+}

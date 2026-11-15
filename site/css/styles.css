@@ -250,6 +250,7 @@ main:focus, main:focus-visible { outline: none; }
 /* ---------- section blocks with tiles ---------- */
 
 .block { margin-top: 3.25rem; }
+.block--first { margin-top: 2rem; }
 .sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding-top: 0.7rem; border-top: 4px solid var(--rule); }
 .sec-title { font: 800 clamp(1.35rem, 1.2rem + 0.6vw, 1.7rem)/1.15 var(--sans); letter-spacing: -0.015em; }
 .sec-more { color: var(--ink); font-size: 0.9rem; font-weight: 700; text-underline-offset: 3px; white-space: nowrap; }
