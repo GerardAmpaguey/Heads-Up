@@ -297,3 +297,5 @@ main:focus, main:focus-visible { outline: none; }
 .lead > .credit { right: 1rem; top: 1rem; bottom: auto; }
 .sheet__banner > .photo { z-index: 0; }
 .sheet__banner > .sheet__close { z-index: 3; }
+
+.tile__art--locator { width: 66%; }

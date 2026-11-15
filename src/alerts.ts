@@ -26,7 +26,7 @@ export type Alert = {
 
 export type Place = { lat: number; lon: number; country?: string; city?: string };
 
-export type PersonalAlert = Alert & { distanceKm: number | null; near: boolean };
+export type PersonalAlert = Alert & { distanceKm: number | null; bearing: number | null; near: boolean };
 
 const RANK: Record<Severity, number> = { urgent: 0, 'heads-up': 1, fyi: 2 };
 const BY_RANK: Severity[] = ['urgent', 'heads-up', 'fyi'];
@@ -34,6 +34,15 @@ const BY_RANK: Severity[] = ['urgent', 'heads-up', 'fyi'];
 /** One step more severe, never past urgent. */
 export function bump(severity: Severity): Severity {
   return BY_RANK[Math.max(0, RANK[severity] - 1)];
+}
+
+/** Compass bearing in whole degrees (0 = north, 90 = east) from the first point to the second. */
+export function bearingDeg(aLat: number, aLon: number, bLat: number, bLon: number): number {
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const dLon = rad(bLon - aLon);
+  const y = Math.sin(dLon) * Math.cos(rad(bLat));
+  const x = Math.cos(rad(aLat)) * Math.sin(rad(bLat)) - Math.sin(rad(aLat)) * Math.cos(rad(bLat)) * Math.cos(dLon);
+  return Math.round(((Math.atan2(y, x) * 180) / Math.PI + 360) % 360);
 }
 
 /** Great-circle distance in km. */
@@ -87,12 +96,13 @@ export function personalise(alerts: Alert[], place: Place | null, limit = 40): P
   const out: PersonalAlert[] = [];
   for (const a of alerts) {
     const km = place && a.lat != null && a.lon != null ? Math.round(distanceKm(place.lat, place.lon, a.lat, a.lon)) : null;
+    const bearing = km != null && place && a.lat != null && a.lon != null ? bearingDeg(place.lat, place.lon, a.lat, a.lon) : null;
     const near = km != null && km <= NEAR_KM;
     let severity = a.severity;
     // A quake you may have felt, or a storm on your doorstep, matters more than the same one far away.
     if (near && (a.kind !== 'earthquake' || (a.magnitude ?? 0) >= 5)) severity = bump(severity);
     const keep = place ? severity === 'urgent' || (km != null && km <= WORLD_KM) : severity !== 'fyi';
-    if (keep) out.push({ ...a, severity, distanceKm: km, near });
+    if (keep) out.push({ ...a, severity, distanceKm: km, bearing, near });
   }
   out.sort(
     (x, y) =>

@@ -82,6 +82,7 @@ async function loadLive() {
       action: a.action, source: a.source, url: a.url, tags: a.tags || [], image: a.image, imageCredit: a.imageCredit,
       ago: Math.max(0, Math.round((now - Date.parse(a.time)) / 60000)),
       km: a.distanceKm == null ? null : Math.round(a.distanceKm),
+      bearing: a.bearing ?? null,
       demo: false,
     }));
     for (let i = ITEMS.length - 1; i >= 0; i--) if (ITEMS[i].category === 'hazard') ITEMS.splice(i, 1);
@@ -115,8 +116,46 @@ function sevPill(item) {
   return el('span', { class: 'sev', 'data-sev': item.severity }, SEVERITY[item.severity].label);
 }
 
+/* Locator: you at the centre, rings at 500 km and 1,500 km, a dot where the event is. Drawn from the
+   distance and compass bearing the API gives us, so it needs no map data and works for every hazard. */
+const NS = 'http://www.w3.org/2000/svg';
+const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+const radiusFor = (km) => 10 + 34 * Math.sqrt(Math.min(km, 3000) / 3000);
+
+function locator(item) {
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 100 100');
+  svg.setAttribute('aria-hidden', 'true');
+  const add = (tag, attrs) => {
+    const n = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+    svg.append(n);
+    return n;
+  };
+  for (const km of [500, 1500]) add('circle', { cx: 50, cy: 50, r: radiusFor(km).toFixed(1), fill: 'none', stroke: 'currentColor', 'stroke-width': 0.9, 'stroke-dasharray': '2 2.5', opacity: 0.55 });
+  add('path', { d: 'M50 3.5 47.6 9h4.8z', fill: 'currentColor', opacity: 0.8 });
+  const rad = (item.bearing * Math.PI) / 180;
+  const r = radiusFor(item.km);
+  const x = 50 + r * Math.sin(rad);
+  const y = 50 - r * Math.cos(rad);
+  add('line', { x1: 50, y1: 50, x2: x.toFixed(1), y2: y.toFixed(1), stroke: 'currentColor', 'stroke-width': 1.2, opacity: 0.7 });
+  add('circle', { cx: 50, cy: 50, r: 2.6, fill: 'currentColor' });
+  add('circle', { cx: x.toFixed(1), cy: y.toFixed(1), r: 7.5, fill: 'currentColor', opacity: 0.28 });
+  add('circle', { cx: x.toFixed(1), cy: y.toFixed(1), r: 4, fill: 'currentColor' });
+  return svg;
+}
+
 function art(item, cls) {
-  return el('span', { class: cls, 'data-cat': item.category, html: ICONS[item.category] });
+  const hasLocator = item.category === 'hazard' && item.km != null && item.bearing != null;
+  const node = el('span', { class: cls, 'data-cat': item.category, html: hasLocator ? null : ICONS[item.category] });
+  if (hasLocator) {
+    const dir = COMPASS[Math.round(item.bearing / 45) % 8];
+    node.classList.add(`${cls}--locator`);
+    node.setAttribute('role', 'img');
+    node.setAttribute('aria-label', `${item.km} km ${dir} of you`);
+    node.append(locator(item));
+  }
+  return node;
 }
 
 /* Optional photo. The picture is hotlinked from the source (we never copy it). If it is missing or

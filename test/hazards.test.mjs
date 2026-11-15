@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker, { placeFrom } from '../src/worker.ts';
-import { actionFor, bump, distanceKm, personalise } from '../src/alerts.ts';
+import { actionFor, bump, distanceKm, bearingDeg, personalise } from '../src/alerts.ts';
 import { normaliseUsgs, usgsSeverity } from '../src/usgs.ts';
 import { normaliseGdacs, gdacsUrls } from '../src/gdacs.ts';
 import { refresh, load, isStale, allAlerts, KEY } from '../src/hazards.ts';
@@ -284,4 +284,13 @@ test('gdacs cyclones carry the overview map of their newest episode, other hazar
   assert.equal(tc.image, 'https://www.gdacs.org/contentdata/resources/imgtemp/gdacs/tc/1001/1001_5_tn.png');
   assert.equal(tc.imageCredit, 'GDACS / EC-JRC');
   assert.equal(fl.image, undefined);
+});
+
+test('bearing points the right way and personalise includes it', () => {
+  assert.equal(bearingDeg(14, 121, 16, 121), 0);
+  assert.equal(bearingDeg(14, 121, 12, 121), 180);
+  assert.ok(Math.abs(bearingDeg(0, 100, 0, 110) - 90) <= 1);
+  const [a] = personalise(normaliseUsgs(usgsFeed), { lat: 14.6, lon: 121 });
+  assert.equal(typeof a.bearing, 'number');
+  assert.equal(personalise(normaliseUsgs(usgsFeed), null, 5).every((x) => x.bearing === null), true);
 });
