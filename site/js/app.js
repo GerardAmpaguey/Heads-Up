@@ -244,7 +244,9 @@ function openSheet(item) {
       ),
       item.tags.length > 0 && el('p', { class: 'sheet__tags' }, item.tags.map((t) => el('span', { class: 'tag' }, t))),
       el('div', { class: 'sheet__actions' },
-        el('a', { class: 'btn btn--solid', href: item.url, target: '_blank', rel: 'noopener noreferrer' }, 'Open source ↗'),
+        item.demo
+          ? el('span', { class: 'btn btn--ghost', 'aria-disabled': 'true' }, 'Demo item, no article')
+          : el('a', { class: 'btn btn--solid', href: item.url, target: '_blank', rel: 'noopener noreferrer' }, 'Open source ↗'),
         el('button', { class: 'btn btn--ghost', type: 'button', onclick: () => sheet.close() }, 'Close'),
       ),
       el('p', { class: 'sheet__note' }, item.demo ? 'Demo item written to show the layout. It is not real news.' : 'Automated data from the source above, and it may be delayed or revised. Check your official local agency before you act.'),
