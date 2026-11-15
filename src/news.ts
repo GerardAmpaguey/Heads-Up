@@ -24,7 +24,7 @@ export const FEEDS: FeedDef[] = [
   { id: 'wp-news', name: 'WordPress News', url: 'https://wordpress.org/news/feed/', category: 'webdev', kind: 'release', tags: ['WordPress'], skip: PRERELEASE },
   { id: 'wordfence', name: 'Wordfence', url: 'https://www.wordfence.com/blog/feed/', category: 'webdev', kind: 'security', tags: ['WordPress'] },
   { id: 'sucuri', name: 'Sucuri', url: 'https://blog.sucuri.net/feed', category: 'webdev', kind: 'security', tags: [] },
-  { id: 'astro', name: 'Astro releases', url: 'https://github.com/withastro/astro/releases.atom', category: 'webdev', kind: 'release', tags: ['Astro'], label: 'Astro', github: true, only: /^astro@/i, skip: PRERELEASE },
+  { id: 'astro', name: 'Astro', url: 'https://astro.build/rss.xml', category: 'webdev', kind: 'news', tags: ['Astro'] },
   { id: 'nextjs', name: 'Next.js releases', url: 'https://github.com/vercel/next.js/releases.atom', category: 'webdev', kind: 'release', tags: ['Next.js'], label: 'Next.js', github: true, skip: PRERELEASE },
   { id: 'tailwind', name: 'Tailwind CSS releases', url: 'https://github.com/tailwindlabs/tailwindcss/releases.atom', category: 'webdev', kind: 'release', tags: ['Tailwind'], label: 'Tailwind CSS', github: true, skip: PRERELEASE },
   { id: 'wrangler', name: 'Wrangler releases', url: 'https://github.com/cloudflare/workers-sdk/releases.atom', category: 'webdev', kind: 'release', tags: ['Cloudflare'], label: 'Wrangler', github: true, only: /^wrangler@/i, skip: PRERELEASE },

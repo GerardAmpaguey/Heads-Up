@@ -46,7 +46,7 @@ function el(tag, attrs = {}, ...kids) {
 }
 
 function metaLine(item) {
-  return [item.source, item.km != null ? `${item.km.toLocaleString('en')} km away` : null, ago(item.ago)].filter(Boolean).join(' · ');
+  return [item.local ? `${item.source} (local news)` : item.source, item.km != null ? `${item.km.toLocaleString('en')} km away` : null, ago(item.ago)].filter(Boolean).join(' · ');
 }
 
 function ago(minutes) {

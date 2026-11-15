@@ -4,6 +4,8 @@ import { FEEDS, decode, normaliseEol, normaliseFeed, parseFeed, rate, tagsFor } 
 
 const NOW = new Date('2026-11-15T12:00:00Z');
 const def = (id) => FEEDS.find((f) => f.id === id);
+// A GitHub release feed for a monorepo, filtered to one package (how Wrangler is set up).
+const astroGh = { id: 'astro-gh', name: 'Astro releases', url: 'https://x.test/releases.atom', category: 'webdev', kind: 'release', tags: ['Astro'], label: 'Astro', github: true, only: /^astro@/i, skip: /\b(beta|rc)\b/i };
 
 const rss = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -77,7 +79,7 @@ test('parseFeed is safe on junk', () => {
 });
 
 test('github release feeds: filter by package, drop betas, build a readable headline, never use avatars', () => {
-  const items = normaliseFeed(def('astro'), atom, NOW);
+  const items = normaliseFeed(astroGh, atom, NOW);
   assert.equal(items.length, 2);
   assert.equal(items[0].title, 'Astro 6.2.0 released');
   assert.equal(items[0].image, undefined);
