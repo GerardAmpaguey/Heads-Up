@@ -66,7 +66,7 @@ export function localPlaceFrom(request: Request): LocalPlace | null {
 type EdgeCache = { match(req: Request): Promise<Response | undefined>; put(req: Request, res: Response): Promise<void> };
 
 /** Local news, cached for 30 minutes per place so visitors never wait on, or hammer, the news source. */
-async function localNews(request: Request, ctx: Ctx): Promise<{ place: string | null; ok: boolean; items: LocalItem[]; error?: string }> {
+async function localNews(request: Request, ctx: Ctx): Promise<{ place: string | null; ok: boolean; items: LocalItem[]; error?: string; photos?: string }> {
   const place = localPlaceFrom(request);
   if (!place) return { place: null, ok: true, items: [] };
   const cache = (globalThis as unknown as { caches?: { default?: EdgeCache } }).caches?.default;
@@ -75,8 +75,8 @@ async function localNews(request: Request, ctx: Ctx): Promise<{ place: string | 
     let hit = await cache?.match(key);
     if (!hit) {
       // Ask Google News and Bing News together and merge what comes back. Either can be slow or refuse us.
-      const ask = async (url: string) => {
-        const res = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; Heads-Up/0.1; +https://heads-up.ampagueyg.workers.dev)', accept: 'application/rss+xml, application/xml, text/xml' }, signal: AbortSignal.timeout(6000) });
+      const ask = async (url: string, accept = 'application/rss+xml, application/xml, text/xml') => {
+        const res = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; Heads-Up/0.1; +https://heads-up.ampagueyg.workers.dev)', accept }, signal: AbortSignal.timeout(6000) });
         if (!res.ok) throw new Error(`news answered ${res.status}`);
         return res.text();
       };
@@ -84,14 +84,16 @@ async function localNews(request: Request, ctx: Ctx): Promise<{ place: string | 
       const feeds = localFeedsFor(place);
       const asks = feeds.flatMap((f) => f.urls.map((u) => ask(u).then((xml) => ({ publisher: f.publisher, xml }))));
       const papers = (await Promise.allSettled(asks)).flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
-      const photos = Object.assign({}, ...(await Promise.allSettled(feeds.filter((f) => f.wp).map((f) => ask(f.wp!).then((t) => wpPhotos(JSON.parse(t)))))).flatMap((r) => (r.status === 'fulfilled' ? [r.value] : [])));
+      const photoJobs = await Promise.allSettled(feeds.filter((f) => f.wp).map((f) => ask(f.wp!, 'application/json').then((t) => wpPhotos(JSON.parse(t)))));
+      const photos = Object.assign({}, ...photoJobs.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : [])));
+      const photoNote = photoJobs.map((r) => (r.status === 'fulfilled' ? `ok ${Object.keys(r.value).length}` : String((r.reason as Error)?.message ?? r.reason).slice(0, 60))).join('; ');
       const xmls = results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map((r) => r.value);
       if (xmls.length === 0 && papers.length === 0) throw new Error(results.map((r) => (r as PromiseRejectedResult).reason?.message ?? 'failed').join('; '));
       const items = normaliseLocal(xmls, place, new Date(), 30, papers, photos);
-      hit = new Response(JSON.stringify(items), { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=1800' } });
+      hit = new Response(JSON.stringify(items), { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=1800', 'x-photos': photoNote } });
       if (cache) ctx.waitUntil(cache.put(key, hit.clone()).catch(() => undefined));
     }
-    return { place: place.name, ok: true, items: (await hit.json()) as LocalItem[] };
+    return { place: place.name, ok: true, items: (await hit.json()) as LocalItem[], photos: hit.headers.get('x-photos') || undefined };
   } catch (err) {
     return { place: place.name, ok: false, items: [], error: String(err instanceof Error ? err.message : err).slice(0, 120) };
   }
