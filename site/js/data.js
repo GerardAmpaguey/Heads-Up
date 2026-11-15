@@ -2,6 +2,8 @@
 // Shape of an item (live feeds will produce the same shape later):
 //   id, category ('hazard' | 'webdev' | 'ai'), severity ('urgent' | 'heads-up' | 'fyi'),
 //   title, summary, action (what to do), source, url, ago (minutes), tags (for the watchlist)
+// Optional: image (URL of the source's own picture, hotlinked, never copied) and imageCredit
+// (defaults to source). With no image, or if it fails to load, the card shows its icon art.
 
 export const CATEGORIES = {
   hazard: { label: 'Around you', blurb: 'Weather, quakes, outages and other things that could affect you.' },

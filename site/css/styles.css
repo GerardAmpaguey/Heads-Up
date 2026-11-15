@@ -279,3 +279,21 @@ main:focus, main:focus-visible { outline: none; }
   .sheet[open] { animation: rise 0.22s ease-out; }
   @keyframes rise { from { opacity: 0; translate: 0 14px; } }
 }
+
+/* ---------- optional photos ---------- */
+
+.photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.credit {
+  position: absolute; right: 0.6rem; bottom: 0.6rem; z-index: 2; display: none;
+  padding: 0.1rem 0.5rem; border-radius: 4px; background: rgb(8 12 32 / 0.72); color: #e9edfc; font-size: 0.68rem; font-weight: 600;
+}
+.has-photo > .credit { display: block; }
+.has-photo > .lead__art, .has-photo > .tile__art, .has-photo > .sheet__art { display: none; }
+.has-photo.story__thumb > svg { display: none; }
+.story__thumb { position: relative; overflow: hidden; }
+
+/* On the lead the photo sits under the dark gradient so the headline stays readable. */
+.lead > .photo { z-index: -2; }
+.lead > .credit { right: 1rem; top: 1rem; bottom: auto; }
+.sheet__banner > .photo { z-index: 0; }
+.sheet__banner > .sheet__close { z-index: 3; }

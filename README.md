@@ -18,6 +18,10 @@ A news front page, built for scanning:
 - Watchlist: pick the tools you use, saved in the browser
 - Search across all alerts
 
+## Photos
+
+Each alert can carry an optional `image` (the source's own picture, hotlinked and never copied) and `imageCredit`. The card shows it with an "Image: Source" label. With no image, or if it fails to load, the card falls back to its coloured icon art. The live-feed Worker will fill `image` from the feed's media tag or the article's `og:image`. Official maps (USGS, NOAA, NASA, GDACS) are the safest source for hazard imagery. Check each source's terms.
+
 ## Run it
 
 ```

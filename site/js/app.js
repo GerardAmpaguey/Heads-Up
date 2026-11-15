@@ -67,22 +67,37 @@ function art(item, cls) {
   return el('span', { class: cls, 'data-cat': item.category, html: ICONS[item.category] });
 }
 
+/* Optional photo. The picture is hotlinked from the source (we never copy it). If it is missing or
+   fails to load, the coloured icon art underneath stays visible. */
+function withPhoto(container, item, { eager = false, credit = true } = {}) {
+  if (!item.image) return container;
+  const img = el('img', {
+    class: 'photo', src: item.image, alt: '', loading: eager ? 'eager' : 'lazy', decoding: 'async',
+    referrerpolicy: 'no-referrer',
+  });
+  img.addEventListener('load', () => container.classList.add('has-photo'));
+  img.addEventListener('error', () => img.remove());
+  container.prepend(img);
+  if (credit) container.append(el('span', { class: 'credit' }, `Image: ${item.imageCredit || item.source}`));
+  return container;
+}
+
 /* Large lead story at the top of the front page. */
 function lead(item) {
-  return el('button', { class: 'lead', type: 'button', 'data-cat': item.category, onclick: () => openSheet(item) },
+  return withPhoto(el('button', { class: 'lead', type: 'button', 'data-cat': item.category, onclick: () => openSheet(item) },
     art(item, 'lead__art'),
     el('span', { class: 'lead__text' },
       el('span', { class: 'lead__kicker' }, sevPill(item), el('span', {}, `${CATEGORIES[item.category].label} · ${ago(item.ago)}`)),
       el('span', { class: 'lead__title' }, item.title),
       el('span', { class: 'lead__summary' }, item.summary),
     ),
-  );
+  ), item, { eager: true });
 }
 
 /* Row with a small thumbnail, used in the side list and the Latest list. */
 function story(item, withSummary) {
   return el('button', { class: 'story', type: 'button', 'data-sev': item.severity, onclick: () => openSheet(item) },
-    art(item, 'story__thumb'),
+    withPhoto(art(item, 'story__thumb'), item, { credit: false }),
     el('span', { class: 'story__body' },
       el('span', { class: 'story__label' }, sevPill(item), el('span', {}, CATEGORIES[item.category].label)),
       el('span', { class: 'story__title' }, item.title),
@@ -95,10 +110,10 @@ function story(item, withSummary) {
 /* Image tile, used in section grids. */
 function tile(item) {
   return el('button', { class: 'tile', type: 'button', 'data-sev': item.severity, onclick: () => openSheet(item) },
-    el('span', { class: 'tile__img', 'data-cat': item.category },
+    withPhoto(el('span', { class: 'tile__img', 'data-cat': item.category },
       art(item, 'tile__art'),
       el('span', { class: 'tile__tag' }, sevPill(item)),
-    ),
+    ), item),
     el('span', { class: 'tile__title' }, item.title),
     el('span', { class: 'tile__meta' }, `${item.source} · ${ago(item.ago)}`),
   );
@@ -124,10 +139,10 @@ function panel(title, ...kids) {
 
 function openSheet(item) {
   sheet.replaceChildren(
-    el('div', { class: 'sheet__banner', 'data-cat': item.category },
+    withPhoto(el('div', { class: 'sheet__banner', 'data-cat': item.category },
       art(item, 'sheet__art'),
       el('button', { class: 'sheet__close', type: 'button', 'aria-label': 'Close', onclick: () => sheet.close() }, '×'),
-    ),
+    ), item),
     el('div', { class: 'sheet__body' },
       el('p', { class: 'sheet__kicker' }, sevPill(item), el('span', {}, `${CATEGORIES[item.category].label} · ${item.source} · ${ago(item.ago)}`)),
       el('h2', { class: 'sheet__title', id: 'sheet-title' }, item.title),
