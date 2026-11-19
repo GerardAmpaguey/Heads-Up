@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canBrowse, fromNominatim, homeFirst, townLabel } from '../site/js/places.js';
+import { canBrowse, fromNominatim, homeFirst, searchPlaces, townLabel } from '../site/js/places.js';
 
 const row = (o) => ({ category: 'place', lat: '16.04', lon: '120.33', ...o });
 
@@ -49,4 +49,29 @@ test('search lists the visitor\'s own country first, and only the Philippines ca
   assert.equal(canBrowse('PH'), true);
   assert.equal(canBrowse('US'), false);
   assert.equal(canBrowse(null), false);
+});
+
+test('a famous namesake does not hide places in the visitor\'s own country', async () => {
+  const usState = { category: 'boundary', addresstype: 'state', name: 'California', lat: '36.7', lon: '-119.4', address: { state: 'California', country: 'United States', country_code: 'us' } };
+  const brgy = { category: 'place', addresstype: 'village', name: 'California', lat: '10.0', lon: '124.4', address: { village: 'California', municipality: 'Ubay', state: 'Bohol', country: 'Philippines', country_code: 'ph' } };
+  const nickname = { category: 'place', addresstype: 'town', name: 'Mintal', lat: '7.1', lon: '125.5', address: { town: 'Mintal', state: 'Davao Region', country: 'Philippines', country_code: 'ph' } };
+  const real = globalThis.fetch;
+  const asked = [];
+  globalThis.fetch = async (u) => { asked.push(String(u)); return new Response(JSON.stringify(String(u).includes('countrycodes=ph') ? [brgy, nickname] : [usState])); };
+  try {
+    let first;
+    const found = await searchPlaces('california', undefined, 'PH', { onFirst: (w) => { first = w; }, pauseMs: 0 });
+    assert.deepEqual(first.map((p) => p.label), ['California, United States'], 'worldwide results are shown first');
+    assert.deepEqual(found.map((p) => [p.label, p.kind]), [['California, United States', 'State or province'], ['California, Ubay, Bohol, Philippines', 'Barangay']], 'a match on another name (Mintal) is left out');
+    assert.equal(asked.length, 2);
+    assert.doesNotMatch(asked[0], /countrycodes/);
+    // Someone in the US already has a match at home: one request only.
+    asked.length = 0;
+    await searchPlaces('california', undefined, 'US', { pauseMs: 0 });
+    assert.equal(asked.length, 1);
+    // No country known: one request only.
+    asked.length = 0;
+    await searchPlaces('california', undefined, null, { pauseMs: 0 });
+    assert.equal(asked.length, 1);
+  } finally { globalThis.fetch = real; }
 });

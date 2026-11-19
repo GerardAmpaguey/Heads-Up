@@ -144,6 +144,10 @@ const picker = document.getElementById('picker');
 /** The visitor's country: the place they picked, else the one their connection is in. Null if unknown. */
 const homeCountry = () => place?.cc || feed.data?.location?.country || null;
 
+function countryName(cc) {
+  try { return new Intl.DisplayNames(['en'], { type: 'region' }).of(cc) || 'your country'; } catch { return 'your country'; }
+}
+
 async function chooseLocation(next) {
   if (next && !next.name) {
     const found = await reverse(next.lat, next.lon).catch(() => null);
@@ -206,9 +210,12 @@ function openPicker() {
       if (text.length < 2) return;
       list.replaceChildren();
       say('Searching…');
+      const show = (found) => list.replaceChildren(...found.map((p) => el('li', {}, el('button', { class: 'picker__opt', type: 'button', onclick: () => chooseLocation(p) }, el('span', {}, p.label), p.kind && el('span', { class: 'picker__kind' }, p.kind)))));
       try {
-        const found = await searchPlaces(text, fresh(), home);
-        list.replaceChildren(...found.map((p) => el('li', {}, el('button', { class: 'picker__opt', type: 'button', onclick: () => chooseLocation(p) }, el('span', {}, p.label), p.kind && el('span', { class: 'picker__kind' }, p.kind)))));
+        const found = await searchPlaces(text, fresh(), home, {
+          onFirst: (world) => { show(world); say(`Also looking in ${countryName(home)}…`); },
+        });
+        show(found);
         say(found.length ? '' : `No places match that name. Try a nearby town, or add the state or country, like “Portland, Oregon”${browse ? ', or browse by province' : ''}.`);
       } catch (err) { failed(err); }
     });
