@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker, { localPlaceFrom, pickNews } from '../src/worker.ts';
-import { localFeedsFor, bingUrl, countryCode, normaliseLocal, placeName, rateLocal, realLink, searchUrl, wpPhotos } from '../src/local.ts';
+import { localFeedsFor, bingUrl, countryCode, normaliseLocal, placeName, rateLocal, realLink, searchUrl, topicsFor, wpPhotos } from '../src/local.ts';
 
 const NOW = new Date('2026-11-15T12:00:00Z');
 const at = (h) => new Date(NOW.getTime() - h * 3_600_000).toUTCString();
@@ -26,9 +26,38 @@ test('place names are validated', () => {
 
 test('search url asks for the place, hazard topics, three days, and the right edition', () => {
   const u = decodeURIComponent(searchUrl({ name: 'Baguio', cc: 'PH' }));
-  assert.match(u, /"Baguio" \(typhoon OR "tropical storm" OR earthquake/);
+  assert.match(u, /"Baguio" \(typhoon OR earthquake OR flood/);
+  assert.match(u, /"state of calamity"/);
   assert.match(u, /when:3d/);
   assert.match(u, /gl=PH&ceid=PH:en/);
+});
+
+test('search words follow the country: typhoons in Asia, hurricanes in the Americas, cyclones in Australia', () => {
+  const ph = topicsFor('PH');
+  assert.equal(ph[0], 'typhoon');
+  assert.ok(ph.includes('class suspension') && !ph.includes('hurricane'));
+  const us = topicsFor('US');
+  assert.equal(us[0], 'hurricane');
+  assert.ok(us.includes('tornado') && !us.includes('typhoon') && !us.includes('state of calamity'));
+  const au = topicsFor('AU');
+  assert.equal(au[0], 'cyclone');
+  assert.ok(au.includes('bushfire'));
+  const fr = topicsFor('FR');
+  assert.ok(fr.includes('earthquake') && fr.includes('storm') && !fr.includes('typhoon') && !fr.includes('hurricane'));
+  assert.deepEqual(topicsFor().slice(0, 3), ['typhoon', 'hurricane', 'cyclone'], 'no country: every storm word');
+  assert.equal(new Set(ph).size, ph.length, 'no repeats');
+  // Each list stays about the size of the original Philippine one, so the query never grows past it.
+  for (const cc of [undefined, 'PH', 'US', 'IN', 'GB', 'JP']) assert.ok(topicsFor(cc).length <= 26, `${cc}: ${topicsFor(cc).length}`);
+});
+
+test('news editions: a country\'s English edition when there is one, else international English', () => {
+  assert.match(searchUrl({ name: 'Sydney', cc: 'AU' }), /hl=en-AU&gl=AU&ceid=AU:en$/);
+  assert.match(searchUrl({ name: 'Tokyo', cc: 'JP' }), /hl=en-US&gl=US&ceid=US:en$/);
+  assert.match(searchUrl({ name: 'Somewhere' }), /hl=en-US&gl=US&ceid=US:en$/);
+  assert.match(decodeURIComponent(searchUrl({ name: 'Tokyo', cc: 'JP' })), /"Tokyo" \(typhoon OR/);
+  assert.match(bingUrl({ name: 'Toronto', cc: 'CA' }), /setmkt=en-CA$/);
+  assert.doesNotMatch(bingUrl({ name: 'Tokyo', cc: 'JP' }), /setmkt/);
+  assert.match(decodeURIComponent(bingUrl({ name: 'Miami', cc: 'US' })), /"Miami" \(hurricane OR/);
 });
 
 test('ratings: storms and evacuations urgent, floods and outages heads-up, other news fyi, urgent cools after two days', () => {
@@ -36,6 +65,21 @@ test('ratings: storms and evacuations urgent, floods and outages heads-up, other
   assert.equal(rateLocal('Typhoon Kiko to hit Luzon', 3 * 86_400_000 - 1), 'heads-up');
   assert.equal(rateLocal('Classes suspended due to floods', 3_600_000), 'heads-up');
   assert.equal(rateLocal('Flower festival returns', 3_600_000), 'fyi');
+});
+
+test('ratings understand storm and warning words from other countries', () => {
+  for (const t of ['Hurricane Lee makes landfall', 'Tropical Cyclone Alfred nears Brisbane', 'Tornado warning issued for Tulsa', 'Red warning for wind in Cork', 'Missile alert sounds in Okinawa'])
+    assert.equal(rateLocal(t, 3_600_000), 'urgent', t);
+  for (const t of ['Blizzard to hit Winnipeg', 'Bushfire near Perth contained', 'Heatwave grips Delhi', 'Boil water notice for Leeds', 'Load shedding returns to Johannesburg', 'Monsoon rains lash Mumbai'])
+    assert.equal(rateLocal(t, 3_600_000), 'heads-up', t);
+  for (const t of ['Where to watch the parade in Toronto', 'Mayor hailed for new park in Leeds'])
+    assert.equal(rateLocal(t, 3_600_000), 'fyi', t);
+});
+
+test('a story counts as about the place even when the headline drops the accents', () => {
+  const xml = `<rss><channel>${item('Flooding closes roads in Zurich', 'SRF', 2, 'zh')}${item('Sao Paulo power outage hits millions', 'Reuters', 3, 'sp')}</channel></rss>`;
+  assert.deepEqual(normaliseLocal(xml, { name: 'Zürich', cc: 'CH' }, NOW).map((i) => [i.title, i.severity]), [['Flooding closes roads in Zurich', 'heads-up']]);
+  assert.equal(normaliseLocal(xml, { name: 'São Paulo', cc: 'BR' }, NOW).find((i) => /Sao Paulo/.test(i.title)).severity, 'heads-up');
 });
 
 test('normaliseLocal strips the publisher suffix and keeps recent, non-duplicate stories about the place, rating hazards higher', () => {

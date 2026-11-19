@@ -1,5 +1,5 @@
 import { CATEGORIES, SEVERITY } from './data.js';
-import { barangaysOf, citiesOf, provinces, resolve, reverse, searchPlaces, townLabel } from './places.js';
+import { barangaysOf, canBrowse, citiesOf, provinces, resolve, reverse, searchPlaces, townLabel } from './places.js';
 
 // Everything on the page comes from /api/alerts. Nothing is made up.
 const ITEMS = [];
@@ -141,6 +141,9 @@ function showLocation(loc) {
 
 const picker = document.getElementById('picker');
 
+/** The visitor's country: the place they picked, else the one their connection is in. Null if unknown. */
+const homeCountry = () => place?.cc || feed.data?.location?.country || null;
+
 async function chooseLocation(next) {
   if (next && !next.name) {
     const found = await reverse(next.lat, next.lon).catch(() => null);
@@ -155,7 +158,8 @@ async function chooseLocation(next) {
   route();
 }
 
-/* The picker has four screens: search, provinces, cities and towns of a province, barangays of a city. */
+/* The picker opens on a worldwide search. Visitors in the Philippines can also browse: provinces, then
+   cities and towns of a province, then barangays of a city. */
 function openPicker() {
   let ctl;
   const status = el('p', { class: 'picker__status', role: 'status' });
@@ -183,12 +187,18 @@ function openPicker() {
   };
   const row = (name, ...kids) => el('li', { 'data-name': name.toLowerCase() }, ...kids);
   const back = (text, go) => el('button', { class: 'picker__back', type: 'button', onclick: go }, `‹ ${text}`);
-  const frame = (...kids) => body.replaceChildren(...kids, status, el('p', { class: 'picker__credit' }, 'Places from ', el('a', { href: 'https://www.openstreetmap.org/copyright', target: '_blank', rel: 'noopener noreferrer' }, 'OpenStreetMap'), ' and the ', el('a', { href: 'https://psgc.gitlab.io/', target: '_blank', rel: 'noopener noreferrer' }, 'Philippine Standard Geographic Code'), '.'));
+  const link = (href, text) => el('a', { href, target: '_blank', rel: 'noopener noreferrer' }, text);
+  const osm = () => link('https://www.openstreetmap.org/copyright', 'OpenStreetMap');
+  // Search screens credit OpenStreetMap; the Philippine browse screens also use the PSGC list.
+  const frame = (...kids) => body.replaceChildren(...kids, status, el('p', { class: 'picker__credit' }, 'Places from ', osm(), '.'));
+  const framePH = (...kids) => body.replaceChildren(...kids, status, el('p', { class: 'picker__credit' }, 'Places from ', osm(), ' and the ', link('https://psgc.gitlab.io/', 'Philippine Standard Geographic Code'), '.'));
 
   function searchScreen() {
     say('');
+    const home = homeCountry();
+    const browse = canBrowse(home);
     const list = el('ul', { class: 'picker__list' });
-    const input = el('input', { class: 'picker__input', id: 'picker-input', type: 'search', placeholder: 'Town, city, province or barangay', autocomplete: 'off', 'aria-label': 'Search for a place' });
+    const input = el('input', { class: 'picker__input', id: 'picker-input', type: 'search', placeholder: 'City, town, region or neighbourhood', autocomplete: 'off', 'aria-label': 'Search for a place anywhere in the world' });
     const form = el('form', { class: 'picker__form', role: 'search' }, input, el('button', { class: 'btn btn--solid', type: 'submit' }, 'Search'));
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -197,9 +207,9 @@ function openPicker() {
       list.replaceChildren();
       say('Searching…');
       try {
-        const found = await searchPlaces(text, fresh());
+        const found = await searchPlaces(text, fresh(), home);
         list.replaceChildren(...found.map((p) => el('li', {}, el('button', { class: 'picker__opt', type: 'button', onclick: () => chooseLocation(p) }, el('span', {}, p.label), p.kind && el('span', { class: 'picker__kind' }, p.kind)))));
-        say(found.length ? '' : 'No places match that name. Try a nearby town, or browse by province.');
+        say(found.length ? '' : `No places match that name. Try a nearby town, or add the state or country, like “Portland, Oregon”${browse ? ', or browse by province' : ''}.`);
       } catch (err) { failed(err); }
     });
     const useDevice = el('button', { class: 'btn btn--ghost', type: 'button', onclick: () => {
@@ -213,10 +223,10 @@ function openPicker() {
     } }, 'Use my device location');
     frame(
       el('h2', { class: 'picker__title', id: 'picker-title' }, 'Where are you?'),
-      el('p', { class: 'picker__hint' }, place ? `Showing hazards and news near ${place.label}.` : 'Hazards and local news follow this place. It is saved only on this device.'),
+      el('p', { class: 'picker__hint' }, place ? `Showing hazards and news near ${place.label}. Search for any city or town in the world to change it.` : 'Search for any city or town in the world. Hazards and local news follow this place, and it is saved only on this device.'),
       form, list,
       el('div', { class: 'picker__actions' },
-        el('button', { class: 'btn btn--ghost', type: 'button', onclick: provinceScreen }, 'Browse Philippine provinces'),
+        browse && el('button', { class: 'btn btn--ghost', type: 'button', onclick: provinceScreen }, 'Browse Philippine provinces'),
         useDevice,
         place && el('button', { class: 'btn btn--ghost', type: 'button', onclick: () => chooseLocation(null) }, 'Use my connection’s location'),
       ),
@@ -227,12 +237,12 @@ function openPicker() {
   async function listScreen({ title, hint, backText, onBack, top, load, item, filterLabel }) {
     say('Loading…');
     const list = el('ul', { class: 'picker__list picker__list--long' });
-    frame(back(backText, onBack), el('h2', { class: 'picker__title', id: 'picker-title' }, title), el('p', { class: 'picker__hint' }, hint));
+    framePH(back(backText, onBack), el('h2', { class: 'picker__title', id: 'picker-title' }, title), el('p', { class: 'picker__hint' }, hint));
     try {
       const rows = await load(fresh());
       list.replaceChildren(...rows.map(item));
       const box = filterBox(list, filterLabel);
-      frame(back(backText, onBack), el('h2', { class: 'picker__title', id: 'picker-title' }, title), el('p', { class: 'picker__hint' }, hint), top, box, list);
+      framePH(back(backText, onBack), el('h2', { class: 'picker__title', id: 'picker-title' }, title), el('p', { class: 'picker__hint' }, hint), top, box, list);
       say(rows.length ? '' : 'Nothing listed here.');
       box.focus();
     } catch (err) { failed(err); }
