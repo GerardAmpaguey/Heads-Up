@@ -4,8 +4,8 @@
 //   - Browse (Philippines only, offered to visitors there): PSGC, the government's official list of
 //     provinces, cities, towns and barangays. Coordinates for a browsed place come from Nominatim, once,
 //     when the person picks it.
-// Both services allow requests from the browser. Nominatim's rules ask for no search-as-you-type, so
-// the picker searches when the person presses Enter or Search, and asks once per search.
+// Both services allow requests from the browser. Nominatim's rules ask for no search-as-you-type and at
+// most one request a second, so the picker searches only when the person presses Enter or Search.
 
 const NOMINATIM = 'https://nominatim.openstreetmap.org';
 const PSGC = 'https://psgc.gitlab.io/api';
@@ -14,6 +14,7 @@ const NCR = { code: '130000000', name: 'Metro Manila', ncr: true };
 const round = (n) => Math.round(Number(n) * 100) / 100;
 const plain = (name) => name.replace(/^City of /, '');
 const unique = (list) => [...new Set(list.filter(Boolean))];
+const fold = (t) => t.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase().trim();
 
 async function getJson(url, signal) {
   const res = await fetch(url, { signal });
@@ -71,9 +72,10 @@ export function homeFirst(places, home) {
   return [...places.filter((p) => p.cc === home), ...places.filter((p) => p.cc !== home)];
 }
 
-/** Search the whole world. `home` is the visitor's country code, if known, so their own places come first. */
-export async function searchPlaces(text, signal, home) {
-  const url = `${NOMINATIM}/search?q=${encodeURIComponent(text)}&format=jsonv2&addressdetails=1&limit=20&accept-language=en`;
+const MAX_SHOWN = 12;
+
+async function ask(text, signal, country) {
+  const url = `${NOMINATIM}/search?q=${encodeURIComponent(text)}&format=jsonv2&addressdetails=1&limit=20&accept-language=en${country ? `&countrycodes=${country.toLowerCase()}` : ''}`;
   const seen = new Set();
   const out = [];
   for (const r of await getJson(url, signal)) {
@@ -82,7 +84,34 @@ export async function searchPlaces(text, signal, home) {
     seen.add(p.label);
     out.push(p);
   }
-  return homeFirst(out, home).slice(0, 12);
+  return out;
+}
+
+const pause = (ms, signal) => new Promise((done, fail) => {
+  if (signal?.aborted) return fail(new DOMException('Aborted', 'AbortError'));
+  const t = setTimeout(done, ms);
+  signal?.addEventListener('abort', () => { clearTimeout(t); fail(new DOMException('Aborted', 'AbortError')); }, { once: true });
+});
+
+/**
+ * Search the whole world. `home` is the visitor's country code, if known, so their own places come first.
+ * When a famous place shares the name, Nominatim leaves out the small ones ("California" gives only the US
+ * state, not the barangays called California). So if the worldwide search finds nothing in the visitor's
+ * country, it asks again within that country and adds those matches after the worldwide ones.
+ * `onFirst` gets the worldwide results while the second search runs. Nominatim asks for at most one
+ * request a second, so the second search waits a moment.
+ */
+export async function searchPlaces(text, signal, home, { onFirst, pauseMs = 1000 } = {}) {
+  const world = homeFirst(await ask(text, signal), home).slice(0, MAX_SHOWN);
+  if (!home || world.some((p) => p.cc === home)) return world;
+  onFirst?.(world);
+  await pause(pauseMs, signal);
+  const shown = new Set(world.map((p) => p.label));
+  // Keep only places whose name has the words typed: Nominatim also matches old and alternative names,
+  // so "Tokyo" in the Philippines would otherwise bring up a town once nicknamed Little Tokyo.
+  const typed = fold(text.split(',')[0]);
+  const local = (await ask(text, signal, home)).filter((p) => !shown.has(p.label) && fold(p.label).includes(typed));
+  return [...world, ...local].slice(0, MAX_SHOWN);
 }
 
 /** Name for a pair of coordinates (device location), anywhere in the world. */
