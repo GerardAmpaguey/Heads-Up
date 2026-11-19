@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Heads Up: the important stuff to prepare for, in one place. Hazards near you, web dev and AI.",
+  "description": "Heads Up: what to prepare for, wherever you are. Hazards and local news for any city, plus web dev, AI and tech, and environment news.",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",

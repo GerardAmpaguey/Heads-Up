@@ -107,7 +107,7 @@ test('gdacs normaliser maps kinds and levels, keeps newest episode, skips unknow
   assert.equal(flood.severity, 'heads-up');
   assert.equal(flood.lat, 28);
   assert.equal(flood.lon, 81);
-  assert.match(flood.action, /your official local agency/);
+  assert.match(flood.action, /India Meteorological Department/, 'an event names the agency of the country it hits');
 });
 
 // ---------- shared logic ----------
@@ -120,6 +120,32 @@ test('distance, bump and agency text', () => {
   assert.equal(bump('urgent'), 'urgent');
   assert.match(actionFor('earthquake', { country: 'PH' }), /PHIVOLCS/);
   assert.match(actionFor('wildfire'), /your official local agency/);
+  assert.match(actionFor('cyclone', { country: 'JP' }), /Japan Meteorological Agency/);
+  assert.match(actionFor('cyclone', { country: 'us' }), /National Weather Service/, 'country codes in any case');
+  assert.match(actionFor('earthquake', { country: 'NZ', tsunami: true }), /higher ground.*GeoNet/);
+  assert.match(actionFor('volcano', { country: 'FR' }), /your official local agency/, 'unknown countries fall back');
+});
+
+test('personalise: nearby events name the visitor\'s own agency, far ones keep the advice for where they happen', () => {
+  const alerts = [...normaliseUsgs(usgsFeed), ...normaliseGdacs(gdacsFeed)];
+  // A visitor in Taipei, about 1,200 km from the cyclone that GDACS lists for the Philippines.
+  const taipei = personalise(alerts, { lat: 25.0, lon: 121.5, country: 'TW' });
+  const tc = taipei.find((a) => a.id === 'gdacs:TC:1001');
+  assert.ok(tc.distanceKm < 1500, String(tc.distanceKm));
+  assert.match(tc.action, /Central Weather Administration/);
+  // A visitor in Palau, where we know no agency by name.
+  const palau = personalise(alerts, { lat: 7.5, lon: 134.6, country: 'PW' });
+  const near = palau.find((a) => a.id === 'gdacs:TC:1001');
+  assert.ok(near.distanceKm < 1500, String(near.distanceKm));
+  assert.match(near.action, /your official local agency/);
+  // A visitor in Tokyo still sees the urgent quake in the Philippines, with the Philippine agency.
+  const tokyo = personalise(alerts, { lat: 35.7, lon: 139.7, country: 'JP' });
+  const far = tokyo.find((a) => a.id === 'gdacs:TC:1001');
+  assert.ok(far.distanceKm > 1500);
+  assert.match(far.action, /PAGASA/);
+  // No country known: the alert's own advice is kept.
+  const nowhere = personalise(alerts, { lat: 14.6, lon: 121.0 });
+  assert.match(nowhere.find((a) => a.id === 'gdacs:TC:1001').action, /PAGASA/);
 });
 
 test('personalise: urgent anywhere stays, far non-urgent goes, near events sort first', () => {
@@ -205,6 +231,8 @@ test('placeFrom reads Cloudflare location, lets ?lat&lon override, and rejects n
   assert.equal(picked.city, undefined, 'a chosen place drops the connection city');
   assert.equal(picked.country, undefined);
   assert.equal(picked.chosen, true);
+  assert.equal(placeFrom(withCf('https://x.test/api/alerts?lat=35&lon=139&cc=jp', cf)).country, 'JP', 'a chosen place brings its own country');
+  assert.equal(placeFrom(withCf('https://x.test/api/alerts?lat=35&lon=139&cc=JPN', cf)).country, undefined);
   assert.equal(placeFrom(new Request('https://x.test/api/alerts')), null);
   assert.equal(placeFrom(new Request('https://x.test/api/alerts?lat=999&lon=1')), null);
   assert.equal(placeFrom(new Request('https://x.test/api/alerts?lat=abc&lon=1')), null);

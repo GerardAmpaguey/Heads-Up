@@ -87,9 +87,30 @@ export function distanceKm(aLat: number, aLon: number, bLat: number, bLon: numbe
   return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-// Local agencies we know by name. Everyone else is told to use "your official local agency".
+// Official agencies we know by name, by country code. Anywhere else, or for a hazard not listed,
+// the text says "your official local agency". Add a country by adding a line.
 const AGENCIES: Record<string, Partial<Record<HazardKind, string>>> = {
   PH: { cyclone: 'PAGASA', flood: 'PAGASA', earthquake: 'PHIVOLCS', volcano: 'PHIVOLCS' },
+  US: { cyclone: 'the National Weather Service', flood: 'the National Weather Service', earthquake: 'USGS and your local emergency management office', volcano: 'the USGS Volcano Hazards Program' },
+  CA: { cyclone: 'Environment Canada', flood: 'Environment Canada and your province', earthquake: 'Earthquakes Canada', wildfire: 'your provincial wildfire service' },
+  MX: { cyclone: 'the National Meteorological Service (SMN)', earthquake: 'the National Seismological Service (SSN)', volcano: 'CENAPRED' },
+  JP: { cyclone: 'the Japan Meteorological Agency (JMA)', flood: 'the Japan Meteorological Agency (JMA)', earthquake: 'the Japan Meteorological Agency (JMA)', volcano: 'the Japan Meteorological Agency (JMA)' },
+  TW: { cyclone: 'the Central Weather Administration', flood: 'the Central Weather Administration', earthquake: 'the Central Weather Administration' },
+  HK: { cyclone: 'the Hong Kong Observatory', flood: 'the Hong Kong Observatory' },
+  KR: { cyclone: 'the Korea Meteorological Administration', flood: 'the Korea Meteorological Administration', earthquake: 'the Korea Meteorological Administration' },
+  CN: { cyclone: 'the China Meteorological Administration', flood: 'the China Meteorological Administration' },
+  TH: { cyclone: 'the Thai Meteorological Department', flood: 'the Thai Meteorological Department', earthquake: 'the Thai Meteorological Department' },
+  MY: { cyclone: 'MetMalaysia', flood: 'MetMalaysia' },
+  ID: { cyclone: 'BMKG', flood: 'BMKG', earthquake: 'BMKG', volcano: 'MAGMA Indonesia (PVMBG)' },
+  IN: { cyclone: 'the India Meteorological Department (IMD)', flood: 'the India Meteorological Department (IMD)', earthquake: 'the National Center for Seismology' },
+  BD: { cyclone: 'the Bangladesh Meteorological Department', flood: 'the Bangladesh Meteorological Department' },
+  AU: { cyclone: 'the Bureau of Meteorology', flood: 'the Bureau of Meteorology', earthquake: 'Geoscience Australia', wildfire: 'your state fire service' },
+  NZ: { cyclone: 'MetService', flood: 'MetService', earthquake: 'GeoNet', volcano: 'GeoNet' },
+  GB: { cyclone: 'the Met Office', flood: 'the Met Office and your local flood warning service' },
+  IT: { earthquake: 'INGV and the Civil Protection Department', volcano: 'INGV and the Civil Protection Department' },
+  IS: { flood: 'the Icelandic Met Office', earthquake: 'the Icelandic Met Office', volcano: 'the Icelandic Met Office' },
+  TR: { earthquake: 'AFAD' },
+  CL: { earthquake: 'SENAPRED', volcano: 'SENAPRED' },
 };
 
 export function agencyFor(kind: HazardKind, country?: string): string {
@@ -124,6 +145,8 @@ const WORLD_KM = 1500;
  * - With a location: anything within WORLD_KM, plus every urgent alert anywhere.
  *   Events within NEAR_KM are marked near, and an event close by is bumped one step.
  * - Without a location: global heads-up and urgent alerts only.
+ * When the visitor's country is known, events within WORLD_KM name that country's agency in "what to do",
+ * since that is who will warn them. Events further away keep the advice for where they happen.
  */
 export function personalise(alerts: Alert[], place: Place | null, limit = 80): PersonalAlert[] {
   const out: PersonalAlert[] = [];
@@ -135,7 +158,8 @@ export function personalise(alerts: Alert[], place: Place | null, limit = 80): P
     // A quake you may have felt, or a storm on your doorstep, matters more than the same one far away.
     if (near && (a.kind !== 'earthquake' || (a.magnitude ?? 0) >= 5)) severity = bump(severity);
     const keep = place ? severity === 'urgent' || (km != null && km <= WORLD_KM) : severity !== 'fyi';
-    if (keep) out.push({ ...a, severity, distanceKm: km, bearing, near });
+    const action = place?.country && km != null && km <= WORLD_KM ? actionFor(a.kind, { tsunami: a.tsunami, country: place.country }) : a.action;
+    if (keep) out.push({ ...a, severity, action, distanceKm: km, bearing, near });
   }
   out.sort(
     (x, y) =>

@@ -17,7 +17,8 @@ const json = (body: unknown, status = 200, headers: Record<string, string> = {})
 
 const num = (v: unknown) => (typeof v === 'string' || typeof v === 'number') && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null;
 
-/** Rough location from Cloudflare (city level, no permission prompt), or ?lat=&lon= for testing. */
+/** Rough location from Cloudflare (city level, no permission prompt), or the place the visitor picked
+ *  (?lat=&lon=, with ?cc= for its country). */
 export function placeFrom(request: Request): Place | null {
   const url = new URL(request.url);
   const cf = (request as unknown as { cf?: Record<string, unknown> }).cf ?? {};
@@ -30,7 +31,7 @@ export function placeFrom(request: Request): Place | null {
   return {
     lat,
     lon,
-    country: !chosen && typeof cf.country === 'string' ? cf.country : undefined,
+    country: chosen ? countryCode(url.searchParams.get('cc')) : countryCode(typeof cf.country === 'string' ? cf.country : null),
     city: !chosen && typeof cf.city === 'string' ? cf.city : undefined,
     chosen,
   };
